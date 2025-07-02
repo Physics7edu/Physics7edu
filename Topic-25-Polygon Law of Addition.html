@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+</head>
+<body>
+
+<form style="margin:10px; padding:10px; background:white; border-radius:8px; max-width:1350px;">
+  <div style="display:flex; flex-wrap:wrap; gap:8px;">
+    <label>A(x₁,y₁,z₁):</label> <input type="number" id="x1" value="2" style="width:50px;"> <input type="number" id="y1" value="3" style="width:50px;"> <input type="number" id="z1" value="0" style="width:50px;">
+    <label>B(x₂,y₂,z₂):</label> <input type="number" id="x2" value="6" style="width:50px;"> <input type="number" id="y2" value="3" style="width:50px;"> <input type="number" id="z2" value="0" style="width:50px;">
+    <label>C(x₃,y₃,z₃):</label> <input type="number" id="x3" value="5" style="width:50px;"> <input type="number" id="y3" value="6" style="width:50px;"> <input type="number" id="z3" value="0" style="width:50px;">
+    <label>D(x₄,y₄,z₄):</label> <input type="number" id="x4" value="7" style="width:50px;"> <input type="number" id="y4" value="2" style="width:50px;"> <input type="number" id="z4" value="0" style="width:50px;">
+    <label>E(x₅,y₅,z₅):</label> <input type="number" id="x5" value="4" style="width:50px;"> <input type="number" id="y5" value="0" style="width:50px;"> <input type="number" id="z5" value="0" style="width:50px;">
+    <label>F(x₆,y₆,z₆):</label> <input type="number" id="x6" value="1" style="width:50px;"> <input type="number" id="y6" value="1" style="width:50px;"> <input type="number" id="z6" value="0" style="width:50px;">
+  </div><br>
+
+  <div style="display:grid; grid-template-columns:repeat(12, auto); gap:5px;">
+    <label><input type="checkbox" class="ctrl" id="labelA"> Label A</label>
+    <label><input type="checkbox" class="ctrl" id="labelB"> Label B</label>
+    <label><input type="checkbox" class="ctrl" id="labelC"> Label C</label>
+    <label><input type="checkbox" class="ctrl" id="labelD"> Label D</label>
+    <label><input type="checkbox" class="ctrl" id="labelE"> Label E</label>
+    <label><input type="checkbox" class="ctrl" id="labelF"> Label F</label>
+    <label><input type="checkbox" class="ctrl" id="drawAB"> Draw AB</label>
+    <label><input type="checkbox" class="ctrl" id="labelAB"> Label AB</label>
+    <label><input type="checkbox" class="ctrl" id="drawBC"> Draw BC</label>
+    <label><input type="checkbox" class="ctrl" id="labelBC"> Label BC</label>
+    <label><input type="checkbox" class="ctrl" id="drawCD"> Draw CD</label>
+    <label><input type="checkbox" class="ctrl" id="labelCD"> Label CD</label>
+    <label><input type="checkbox" class="ctrl" id="drawDE"> Draw DE</label>
+    <label><input type="checkbox" class="ctrl" id="labelDE"> Label DE</label>
+    <label><input type="checkbox" class="ctrl" id="drawEF"> Draw EF</label>
+    <label><input type="checkbox" class="ctrl" id="labelEF"> Label EF</label>
+    <label><input type="checkbox" class="ctrl" id="drawAF"> Draw AF</label>
+    <label><input type="checkbox" class="ctrl" id="labelAF"> Label AF</label>
+  </div><br>
+
+  <button type="button" id="resetBtn">Reset</button>
+</form>
+
+<div id="glowscript" class="glowscript"></div>
+
+<script type="text/javascript">
+(function () {
+  let scene;
+
+  function v3(x, y, z) {
+    return vec(parseFloat(x), parseFloat(y), parseFloat(z));
+  }
+
+  function drawLabel(pos, text, colorVal) {
+    label({ pos: pos.add(vec(0.3, 0.3, 0.3)), text: text, color: colorVal, box: true, background: color.black });
+  }
+
+  function drawVector(from, to, colorVal, drawId, labelId) {
+    if (!document.getElementById(drawId).checked) return;
+    let axis = to.sub(from);
+    arrow({ pos: from, axis: axis, color: colorVal, shaftwidth: 0.1 });
+    if (document.getElementById(labelId).checked) {
+      let mid = from.add(to).multiply(0.5);
+      drawLabel(mid, `${axis.x.toFixed(1)}i + ${axis.y.toFixed(1)}j + ${axis.z.toFixed(1)}k`, colorVal);
+    }
+  }
+
+  function drawPoint(pos, labelText, checkbox) {
+    if (checkbox && checkbox.checked) {
+      sphere({ pos: pos, radius: 0.15, color: color.red });
+      drawLabel(pos, labelText, color.white);
+    }
+  }
+
+  function drawAll() {
+    scene.objects.forEach(o => o.visible = false);
+    scene.objects.length = 0;
+
+    let A = v3(x1.value, y1.value, z1.value);
+    let B = v3(x2.value, y2.value, z2.value);
+    let C = v3(x3.value, y3.value, z3.value);
+    let D = v3(x4.value, y4.value, z4.value);
+    let E = v3(x5.value, y5.value, z5.value);
+    let F = v3(x6.value, y6.value, z6.value);
+
+    drawPoint(A, `A(${A.x},${A.y},${A.z})`, labelA);
+    drawPoint(B, `B(${B.x},${B.y},${B.z})`, labelB);
+    drawPoint(C, `C(${C.x},${C.y},${C.z})`, labelC);
+    drawPoint(D, `D(${D.x},${D.y},${D.z})`, labelD);
+    drawPoint(E, `E(${E.x},${E.y},${E.z})`, labelE);
+    drawPoint(F, `F(${F.x},${F.y},${F.z})`, labelF);
+
+    drawVector(A, B, color.yellow, "drawAB", "labelAB");
+    drawVector(B, C, color.cyan, "drawBC", "labelBC");
+    drawVector(C, D, color.orange, "drawCD", "labelCD");
+    drawVector(D, E, color.green, "drawDE", "labelDE");
+    drawVector(E, F, color.magenta, "drawEF", "labelEF");
+    drawVector(A, F, color.blue, "drawAF", "labelAF");
+  }
+
+  function setup() {
+    scene = canvas({ width: 800, height: 600, background: color.black, center: vec(0, 0, 0), camera: { pos: vec(10, 10, 10) } });
+    drawAll();
+    document.querySelectorAll(".ctrl, input[type=number]").forEach(el => el.addEventListener("change", drawAll));
+    resetBtn.addEventListener("click", () => {
+      document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+      drawAll();
+    });
+  }
+
+  window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+  setup();
+})();
+</script>
+
+</body>
+</html>

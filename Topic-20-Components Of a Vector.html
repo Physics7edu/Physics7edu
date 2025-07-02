@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+</head>
+<body>
+<div id="glowscript" class="glowscript"></div>
+
+<form style="margin: 10px;">
+  <label>A(x, y, z):</label>
+  <input type="number" id="ax" value="1" step="0.1">
+  <input type="number" id="ay" value="2" step="0.1">
+  <input type="number" id="az" value="0" step="0.1"> &nbsp;&nbsp;
+  <label>B(x, y, z):</label>
+  <input type="number" id="bx" value="4" step="0.1">
+  <input type="number" id="by" value="5" step="0.1">
+  <input type="number" id="bz" value="0" step="0.1">
+
+  <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+    <label><input type="checkbox" id="drawVec"> Draw AB</label>
+    <label><input type="checkbox" id="showComp"> Show Components</label>
+    <label><input type="checkbox" id="labelA"> Label Point A</label>
+    <label><input type="checkbox" id="labelB"> Label Point B</label>
+    <label><input type="checkbox" id="labelVec"> Label Vector AB</label>
+    <label><input type="checkbox" id="showMag"> Show Magnitude of AB</label>
+    <label><input type="checkbox" id="angleX"> Angle with X-axis</label>
+    <label><input type="checkbox" id="angleY"> Angle with Y-axis</label>
+    <label><input type="checkbox" id="angleZ"> Angle with Z-axis</label>
+    <label><input type="checkbox" id="perpX"> Show ⟂ to X</label>
+    <label><input type="checkbox" id="perpY"> Show ⟂ to Y</label>
+    <label><input type="checkbox" id="perpZ"> Show ⟂ to Z</label>
+  </div><br>
+
+  <button type="button" onclick="resetScene()">Reset</button>
+</form>
+
+<script type="text/javascript">
+(function () {
+  let scene;
+
+  function init() {
+    scene = canvas({ width: 800, height: 600, background: color.black, center: vec(0, 0, 0), camera: { pos: vec(10, 10, 20) } });
+    drawAxes(10);
+    setupEvents();
+    drawScene();
+  }
+
+  function drawAxes(len) {
+    arrow({ pos: vec(-len, 0, 0), axis: vec(2 * len, 0, 0), color: color.white, shaftwidth: 0.03 });
+    label({ pos: vec(len + 0.5, 0, 0), text: "X", color: color.white });
+    label({ pos: vec(-len - 0.5, 0, 0), text: "X'", color: color.white });
+
+    arrow({ pos: vec(0, -len, 0), axis: vec(0, 2 * len, 0), color: color.white, shaftwidth: 0.03 });
+    label({ pos: vec(0, len + 0.5, 0), text: "Y", color: color.white });
+    label({ pos: vec(0, -len - 0.5, 0), text: "Y'", color: color.white });
+
+    arrow({ pos: vec(0, 0, -len), axis: vec(0, 0, 2 * len), color: color.white, shaftwidth: 0.03 });
+    label({ pos: vec(0, 0, len + 0.5), text: "Z", color: color.white });
+    label({ pos: vec(0, 0, -len - 0.5), text: "Z'", color: color.white });
+  }
+
+  function clearScene() {
+    scene.objects.forEach(o => o.visible = false);
+    scene.objects.length = 0;
+    drawAxes(10);
+  }
+
+  window.resetScene = function () {
+    clearScene();
+    ["ax", "ay", "az", "bx", "by", "bz"].forEach(id => document.getElementById(id).value = "");
+    document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+    scene.title = "";
+  };
+
+  function setupEvents() {
+    [
+      "drawVec", "showComp", "labelA", "labelB", "labelVec", "showMag",
+      "angleX", "angleY", "angleZ",
+      "perpX", "perpY", "perpZ"
+    ].forEach(id =>
+      document.getElementById(id).addEventListener("change", drawScene)
+    );
+    ["ax", "ay", "az", "bx", "by", "bz"].forEach(id =>
+      document.getElementById(id).addEventListener("input", drawScene)
+    );
+  }
+
+  // Draw miniature axes at A, length auto-scales to fit AB
+  function drawMiniAxesAtPoint(point, abVec) {
+    let abMag = abVec.mag;
+    let length = Math.max(3, abMag * 1.2); // Always at least 3, or 1.2*|AB|
+    const dirColors = [color.red, color.green, color.blue];
+    const dirs = [vec(1, 0, 0), vec(0, 1, 0), vec(0, 0, 1)];
+    const labels = ["x̂", "ŷ", "ẑ"];
+    for (let i = 0; i < 3; i++) {
+      const end = point.add(dirs[i].multiply(length));
+      arrow({ pos: point, axis: dirs[i].multiply(length), color: dirColors[i], shaftwidth: 0.03 });
+      label({
+        pos: end.add(dirs[i].multiply(0.3)),
+        text: labels[i],
+        color: dirColors[i],
+        box: false,
+        height: 12
+      });
+    }
+    return length;
+  }
+
+  function drawAngleArc3D(axisVec, vector, radius, colorCode, basePoint) {
+    const steps = 30;
+    const theta = axisVec.diff_angle(vector);
+    let rotAxis = axisVec.cross(vector);
+    if (rotAxis.mag === 0) return;
+    rotAxis = rotAxis.norm();
+
+    const arcPoints = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = theta * i / steps;
+      const rotated = rotate(axisVec, { angle: t, axis: rotAxis }).norm().multiply(radius);
+      arcPoints.push(basePoint.add(rotated));
+    }
+
+    curve({ pos: arcPoints, radius: 0.03, color: colorCode });
+
+    const end = arcPoints[arcPoints.length - 1];
+    const tangent = arcPoints[arcPoints.length - 1].subtract(arcPoints[arcPoints.length - 2]).norm();
+    arrow({ pos: end, axis: tangent.multiply(0.3), color: colorCode, shaftwidth: 0.05 });
+  }
+
+  // Draw perpendicular from B to axis at A, label foot as P, Q, R
+  function drawPerpendicular(A, B, axis) {
+    // axis: 0 for X, 1 for Y, 2 for Z
+    let proj, labelText;
+    if (axis === 0) { proj = vec(B.x, A.y, A.z); labelText = "P"; }
+    if (axis === 1) { proj = vec(A.x, B.y, A.z); labelText = "Q"; }
+    if (axis === 2) { proj = vec(A.x, A.y, B.z); labelText = "R"; }
+    curve({ pos: [B, proj], color: [color.red, color.green, color.blue][axis], radius: 0.025, dash: [4,4] });
+    sphere({ pos: proj, radius: 0.08, color: [color.red, color.green, color.blue][axis] });
+    label({
+      pos: proj.add(vec(0.2, 0.2, 0.2)),
+      text: labelText,
+      color: [color.red, color.green, color.blue][axis],
+      box: true,
+      height: 14
+    });
+  }
+
+  function drawScene() {
+    clearScene();
+    scene.title = "";
+
+    const ax = parseFloat(document.getElementById("ax").value);
+    const ay = parseFloat(document.getElementById("ay").value);
+    const az = parseFloat(document.getElementById("az").value);
+    const bx = parseFloat(document.getElementById("bx").value);
+    const by = parseFloat(document.getElementById("by").value);
+    const bz = parseFloat(document.getElementById("bz").value);
+
+    const A = vec(ax, ay, az);
+    const B = vec(bx, by, bz);
+    const AB = B.sub(A);
+    const ABmag = AB.mag;
+
+    // Draw smart miniature axes at A
+    let miniLen = drawMiniAxesAtPoint(A, AB);
+
+    if (document.getElementById("drawVec").checked) {
+      arrow({ pos: A, axis: AB, color: color.yellow, shaftwidth: 0.15 });
+    }
+
+    // Optional: Show components only if checked
+    if (document.getElementById("showComp").checked && ABmag > 0) {
+      const dx = AB.x;
+      const dy = AB.y;
+      const dz = AB.z;
+
+      const xComp = arrow({ pos: A, axis: vec(dx, 0, 0), color: color.red, shaftwidth: 0.05 });
+      const yStart = A.add(vec(dx, 0, 0));
+      const yComp = arrow({ pos: yStart, axis: vec(0, dy, 0), color: color.green, shaftwidth: 0.05 });
+      const zStart = yStart.add(vec(0, dy, 0));
+      const zComp = arrow({ pos: zStart, axis: vec(0, 0, dz), color: color.blue, shaftwidth: 0.05 });
+
+      label({ pos: A.add(vec(dx / 2, -0.3, 0)), text: `${dx.toFixed(1)}i`, color: color.red, box: false, height: 12 });
+      label({ pos: yStart.add(vec(0, dy / 2, -0.3)), text: `${dy.toFixed(1)}j`, color: color.green, box: false, height: 12 });
+      label({ pos: zStart.add(vec(0, 0, dz / 2)).add(vec(0, 0.3, 0)), text: `${dz.toFixed(1)}k`, color: color.blue, box: false, height: 12 });
+    }
+
+    if (document.getElementById("labelA").checked) {
+      sphere({ pos: A, radius: 0.2, color: color.red });
+      label({ pos: A.add(vec(-0.4, -0.4, -0.4)), text: `A(${ax}, ${ay}, ${az})`, height: 14 });
+    }
+
+    if (document.getElementById("labelB").checked) {
+      sphere({ pos: B, radius: 0.2, color: color.red });
+      label({ pos: B.add(vec(0.4, 0.4, 0.4)), text: `B(${bx}, ${by}, ${bz})`, height: 14 });
+    }
+
+    if (document.getElementById("labelVec").checked) {
+      const mid = A.add(AB.multiply(0.5));
+      label({ pos: mid.add(vec(0.4, 0.4, 0.4)), text: `AB = ${AB.x.toFixed(1)}i + ${AB.y.toFixed(1)}j + ${AB.z.toFixed(1)}k`, color: color.yellow, height: 12 });
+    }
+
+    // Show magnitude of AB if checked
+    if (document.getElementById("showMag").checked && ABmag > 0) {
+      const mid = A.add(AB.multiply(0.5));
+      label({
+        pos: mid.add(vec(0, 0.5, 0)),
+        text: `|AB| = ${ABmag.toFixed(2)}`,
+        color: color.orange,
+        height: 16,
+        box: true,
+        background: color.black,
+        opacity: 0.8
+      });
+    }
+
+    // Draw perpendiculars from B to miniature axes at A, label foot as P, Q, R
+    if (document.getElementById("perpX").checked) drawPerpendicular(A, B, 0);
+    if (document.getElementById("perpY").checked) drawPerpendicular(A, B, 1);
+    if (document.getElementById("perpZ").checked) drawPerpendicular(A, B, 2);
+
+    // --- Show only θx, θy, θz and use 50% of lowest nonzero component for arc radius ---
+    if (ABmag > 0) {
+      const unitAB = AB.norm();
+      const X = vec(1, 0, 0), Y = vec(0, 1, 0), Z = vec(0, 0, 1);
+
+      // Angles in degrees
+      const thetaX = Math.acos(AB.x / ABmag) * 180 / Math.PI;
+      const thetaY = Math.acos(AB.y / ABmag) * 180 / Math.PI;
+      const thetaZ = Math.acos(AB.z / ABmag) * 180 / Math.PI;
+
+      // Find lowest nonzero absolute component for arc radius
+      let comps = [Math.abs(AB.x), Math.abs(AB.y), Math.abs(AB.z)].filter(v => v > 0);
+      let minComp = comps.length > 0 ? Math.min.apply(null, comps) : 1;
+      let arcRadius = 0.5 * minComp;
+
+      // Show only the angles in the corner
+      label({
+        pos: vec(-8, 8, 0),
+        text:
+          `θx = ${thetaX.toFixed(1)}°\n` +
+          `θy = ${thetaY.toFixed(1)}°\n` +
+          `θz = ${thetaZ.toFixed(1)}°`,
+        color: color.white,
+        height: 16,
+        box: true,
+        background: color.black,
+        opacity: 0.7
+      });
+
+      if (document.getElementById("angleX").checked) {
+        drawAngleArc3D(X, unitAB, arcRadius, color.orange, A);
+      }
+      if (document.getElementById("angleY").checked) {
+        drawAngleArc3D(Y, unitAB, arcRadius, color.cyan, A);
+      }
+      if (document.getElementById("angleZ").checked) {
+        drawAngleArc3D(Z, unitAB, arcRadius, color.magenta, A);
+      }
+    }
+  }
+
+  window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+  window.onload = init;
+})();
+</script>
+</body>
+</html>

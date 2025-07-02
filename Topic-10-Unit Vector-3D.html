@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<div id="glowscript" class="glowscript">
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <form style="margin: 10px;">
+    <label>P(x, y, z):</label>
+    <input type="number" id="px" value="3" step="0.1">
+    <input type="number" id="py" value="4" step="0.1">
+    <input type="number" id="pz" value="5" step="0.1"><br><br>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+      <label><input type="checkbox" id="showP"> Show Point P</label>
+      <label><input type="checkbox" id="drawOP"> Draw OP</label>
+      <label><input type="checkbox" id="labelMagOP"> Label |OP|</label>
+      <label><input type="checkbox" id="drawOPunit"> Draw OP' (unit)</label>
+      <label><input type="checkbox" id="labelMagOPunit"> Label |OP'|</label>
+      <label><input type="checkbox" id="showPunit"> Show Point P'</label>
+      <label><input type="checkbox" id="showExprOP"> Show OP</label>
+      <label><input type="checkbox" id="showExprOPunit"> Show OP′</label>
+    </div><br>
+
+    <button type="button" onclick="resetScene()">Reset</button>
+  </form>
+
+  <script type="text/javascript">
+    (function () {
+      let scene;
+      let objs = {};
+
+      function init() {
+        scene = canvas({ width: 800, height: 600, background: color.black, center: vec(0, 0, 0), camera: { pos: vec(10, 10, 20) } });
+        drawAxes(10);
+        setupEvents();
+      }
+
+      function drawAxes(len) {
+        arrow({ pos: vec(-len, 0, 0), axis: vec(2 * len, 0, 0), color: color.white, shaftwidth: 0.03 });
+        label({ pos: vec(len + 0.5, 0, 0), text: "X", color: color.white });
+        label({ pos: vec(-len - 0.5, 0, 0), text: "X'", color: color.white });
+        arrow({ pos: vec(0, -len, 0), axis: vec(0, 2 * len, 0), color: color.white, shaftwidth: 0.03 });
+        label({ pos: vec(0, len + 0.5, 0), text: "Y", color: color.white });
+        label({ pos: vec(0, -len - 0.5, 0), text: "Y'", color: color.white });
+        arrow({ pos: vec(0, 0, -len), axis: vec(0, 0, 2 * len), color: color.white, shaftwidth: 0.03 });
+        label({ pos: vec(0, 0, len + 0.5), text: "Z", color: color.white });
+        label({ pos: vec(0, 0, -len - 0.5), text: "Z'", color: color.white });
+      }
+
+      window.resetScene = function () {
+        scene.objects.forEach(o => o.visible = false);
+        scene.objects.length = 0;
+        objs = {};
+        drawAxes(10);
+        ["px", "py", "pz"].forEach(id => document.getElementById(id).value = "");
+        document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+      };
+
+      function setupEvents() {
+        const ids = ["showP", "drawOP", "labelMagOP", "drawOPunit", "labelMagOPunit", "showPunit", "showExprOP", "showExprOPunit"];
+        ids.forEach(id => document.getElementById(id).addEventListener("change", handleAction));
+      }
+
+      function handleAction(e) {
+        const x = parseFloat(document.getElementById("px").value);
+        const y = parseFloat(document.getElementById("py").value);
+        const z = parseFloat(document.getElementById("pz").value);
+        const P = vec(x, y, z);
+        const OPmag = Math.sqrt(x * x + y * y + z * z);
+        const OPunit = OPmag === 0 ? vec(0, 0, 0) : vec(x / OPmag, y / OPmag, z / OPmag);
+        const Punit = OPunit;
+
+        const id = e.target.id;
+        const checked = e.target.checked;
+
+        const remove = (name) => {
+          if (objs[name]) {
+            objs[name].visible = false;
+            delete objs[name];
+          }
+        };
+
+        if (id === "showP") {
+          if (checked && !objs.P) {
+            objs.P = sphere({ pos: P, radius: 0.2, color: color.red });
+            objs.labelP = label({ pos: P.add(vec(0.3, 0.3, 0.3)), text: `P(${x}, ${y}, ${z})`, height: 16 });
+          } else { remove("P"); remove("labelP"); }
+        }
+
+        if (id === "drawOP") {
+          if (checked && !objs.OP)
+            objs.OP = arrow({ pos: vec(0, 0, 0), axis: P, color: color.yellow, shaftwidth: 0.15 });
+          else remove("OP");
+        }
+
+        if (id === "labelMagOP") {
+          if (checked && !objs.labelMagOP) {
+            const mid = vec(0, 0, 0).add(P).multiply(0.5);
+            objs.labelMagOP = label({ pos: mid, text: `|OP| = ${OPmag.toFixed(2)}`, color: color.yellow, height: 14 });
+          } else remove("labelMagOP");
+        }
+
+        if (id === "drawOPunit") {
+          if (checked && !objs.OPunit)
+            objs.OPunit = arrow({ pos: vec(0, 0, 0), axis: Punit, color: color.cyan, shaftwidth: 0.15 });
+          else remove("OPunit");
+        }
+
+        if (id === "labelMagOPunit") {
+          if (checked && !objs.labelMagOPunit) {
+            const mid = OPunit.multiply(0.5);
+            objs.labelMagOPunit = label({ pos: mid, text: "|OP'| = 1.00", color: color.cyan, height: 14 });
+          } else remove("labelMagOPunit");
+        }
+
+        if (id === "showPunit") {
+          if (checked && !objs.Punit) {
+            objs.Punit = sphere({ pos: Punit, radius: 0.2, color: color.cyan });
+            objs.labelPunit = label({ pos: Punit.add(vec(0.3, 0.3, 0.3)), text: `P'(${Punit.x.toFixed(2)}, ${Punit.y.toFixed(2)}, ${Punit.z.toFixed(2)})`, height: 16 });
+          } else { remove("Punit"); remove("labelPunit"); }
+        }
+
+        if (id === "showExprOP") {
+          if (checked && !objs.exprOP) {
+            objs.exprOP = label({
+              pos: scene.center.add(vec(-9, 9, 0)),
+              text: `OP = ${x.toFixed(2)}i + ${y.toFixed(2)}j + ${z.toFixed(2)}k`,
+              color: color.orange,
+              height: 14
+            });
+          } else remove("exprOP");
+        }
+
+        if (id === "showExprOPunit") {
+          if (checked && !objs.exprOPunit) {
+            objs.exprOPunit = label({
+              pos: scene.center.add(vec(-9, 8, 0)),
+              text: `OP′ = ${OPunit.x.toFixed(2)}i + ${OPunit.y.toFixed(2)}j + ${OPunit.z.toFixed(2)}k`,
+              color: color.cyan,
+              height: 14
+            });
+          } else remove("exprOPunit");
+        }
+      }
+
+      window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+      init();
+    })();
+  </script>
+</div>

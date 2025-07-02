@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    #angle-values {
+      position: absolute;
+      top: 10px;
+      right: 30px;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 16px;
+      z-index: 10;
+      min-width: 140px;
+      text-align: right;
+      pointer-events: none;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<div id="glowscript" class="glowscript"></div>
+<div id="angle-values"></div>
+
+<form style="margin: 10px;">
+  <label>|OA|:</label>
+  <input type="number" id="magOA" value="4" min="0" max="10" step="0.01" style="width:60px;">
+  <input type="range" id="sliderOA" min="0" max="10" step="0.01" value="4" style="width:120px;">
+  <label>|OB|:</label>
+  <input type="number" id="magOB" value="3" min="0" max="10" step="0.01" style="width:60px;">
+  <input type="range" id="sliderOB" min="0" max="10" step="0.01" value="3" style="width:120px;">
+  <label>Angle (deg):</label>
+  <input type="number" id="theta" value="60" min="0" max="360" step="1" style="width:60px;">
+  <input type="range" id="sliderTheta" min="0" max="360" step="1" value="60" style="width:120px;">
+  <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+    <label><input type="checkbox" id="addVec"> Add</label>
+    <label><input type="checkbox" id="showAngleOAOP"> Show ∠(OA, OP)</label>
+    <label><input type="checkbox" id="showAngleOBOP"> Show ∠(OB, OP)</label>
+  </div>
+  <button type="button" onclick="resetScene()">Reset</button>
+</form>
+
+<script type="text/javascript">
+(function () {
+  let scene;
+
+  function drawScene() {
+    if (!scene) return;
+    scene.objects.forEach(o => o.visible = false);
+    scene.objects.length = 0;
+
+    const magOA = parseFloat(document.getElementById("magOA").value) || 0;
+    const magOB = parseFloat(document.getElementById("magOB").value) || 0;
+    const thetaDeg = parseFloat(document.getElementById("theta").value) || 0;
+    const thetaRad = thetaDeg * Math.PI / 180;
+
+    const O = vec(0, 0, 0);
+    const A = vec(magOA, 0, 0);
+    const B = vec(magOB * Math.cos(thetaRad), magOB * Math.sin(thetaRad), 0);
+    const P = A.add(B);
+
+    let showOAOP = document.getElementById("showAngleOAOP").checked;
+    let showOBOP = document.getElementById("showAngleOBOP").checked;
+
+    if (document.getElementById("addVec").checked) {
+      arrow({ pos: O, axis: A, color: color.yellow, shaftwidth: 0.12 });
+      label({ pos: A.multiply(0.5).add(vec(0,0.3,0)), text: magOA.toFixed(2), color: color.yellow, box: false, height: 14 });
+
+      arrow({ pos: O, axis: B, color: color.cyan, shaftwidth: 0.12 });
+      label({ pos: B.multiply(0.5).add(vec(0,0.3,0)), text: magOB.toFixed(2), color: color.cyan, box: false, height: 14 });
+
+      arrow({ pos: O, axis: P, color: color.magenta, shaftwidth: 0.12 });
+      label({ pos: P.multiply(0.5).add(vec(0,0.3,0)), text: P.mag.toFixed(2), color: color.magenta, box: false, height: 14 });
+
+      [O,A,B,P].forEach((pt, i) => {
+        sphere({ pos: pt, radius: 0.13, color: [color.white, color.yellow, color.cyan, color.magenta][i] });
+        label({ pos: pt.add(vec(0.3,0.3,0)), text: ['O','A','B','P'][i], color: [color.white, color.yellow, color.cyan, color.magenta][i], box: false, height: 12 });
+      });
+    }
+
+    let angleOAOP = 0, angleOBOP = 0;
+    if (magOA>0 && P.mag>0) angleOAOP = Math.acos(A.norm().dot(P.norm())) * 180/Math.PI;
+    if (magOB>0 && P.mag>0) angleOBOP = Math.acos(B.norm().dot(P.norm())) * 180/Math.PI;
+
+    function drawArc(vec1, vec2, colorArc, radiusFactor) {
+      const angle = vec1.diff_angle(vec2);
+      const axisRot = vec1.cross(vec2).norm();
+      const rad = Math.max(0.3, Math.min(vec1.mag, vec2.mag)) * radiusFactor;
+      const pts = [];
+      const steps = 40;
+      for (let i=0; i<=steps; i++) {
+        const t = angle * i/steps;
+        pts.push(O.add(vec1.rotate({angle:t, axis:axisRot}).norm().multiply(rad)));
+      }
+      curve({ pos: pts, radius:0.03, color: colorArc });
+      const mid = pts[Math.floor(steps/2)];
+      label({ pos: mid, text: (angle*180/Math.PI).toFixed(1)+'°', box: false, color: colorArc, height: 12 });
+    }
+
+    if (document.getElementById("addVec").checked && showOAOP) drawArc(A, P, color.orange, 0.6);
+    if (document.getElementById("addVec").checked && showOBOP) drawArc(B, P, color.green, 0.6);
+
+    const angleDiv = document.getElementById("angle-values");
+    let html = "";
+    if (showOAOP) html += `<div style='color:orange;'>∠(OA,OP) = ${angleOAOP.toFixed(2)}°</div>`;
+    if (showOBOP) html += `<div style='color:lime;'>∠(OB,OP) = ${angleOBOP.toFixed(2)}°</div>`;
+    angleDiv.innerHTML = html;
+    angleDiv.style.display = (showOAOP||showOBOP)? 'block' : 'none';
+  }
+
+  function setup() {
+    scene = canvas({ width:800, height:600, background: color.black, center: vec(0,0,0) });
+    ["magOA","sliderOA","magOB","sliderOB","theta","sliderTheta"].forEach(id=>{
+      document.getElementById(id).addEventListener('input', function(){
+        if (id === "sliderTheta") document.getElementById("theta").value = this.value;
+        else if (id === "theta") document.getElementById("sliderTheta").value = this.value;
+        else if (id.startsWith('slider')) document.getElementById(id.replace('slider','mag')).value = this.value;
+        else document.getElementById(id.replace('mag','slider')).value = this.value;
+        drawScene();
+      });
+    });
+    ['addVec','showAngleOAOP','showAngleOBOP'].forEach(id=>{
+      document.getElementById(id).addEventListener('change', drawScene);
+    });
+    drawScene();
+  }
+
+  window.resetScene = function(){
+    ['magOA','sliderOA','magOB','sliderOB','theta','sliderTheta'].forEach((id,i)=>{ const vals=[4,4,3,3,60,60]; document.getElementById(id).value=vals[i]; });
+    ['addVec','showAngleOAOP','showAngleOBOP'].forEach(id=>document.getElementById(id).checked=false);
+    drawScene();
+  };
+
+  window.__context = { glowscript_container: $('#glowscript').removeAttr('id') };
+  window.onload = setup;
+})();
+</script>
+</body>
+</html>

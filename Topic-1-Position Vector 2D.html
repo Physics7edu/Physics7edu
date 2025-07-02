@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<div id="glowscript" class="glowscript">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <link type="text/css" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" rel="stylesheet" />
+  <link type="text/css" href="https://www.glowscript.org/css/ide.css" rel="stylesheet" />
+  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <form id="vectorForm" style="margin: 10px;">
+    <div style="margin-bottom: 10px;">
+      <label for="xValue">X Value:</label>
+      <input type="number" id="xValue" value="3" step="0.1">
+      <label for="yValue">Y Value:</label>
+      <input type="number" id="yValue" value="4" step="0.1">
+    </div>
+    <div style="margin-bottom: 10px;">
+      <input type="checkbox" id="xComponentCheckbox">
+      <label for="xComponentCheckbox">Show X-Component</label>
+      <input type="checkbox" id="yComponentCheckbox">
+      <label for="yComponentCheckbox">Show Y-Component</label>
+      <input type="checkbox" id="vectorExprCheckbox">
+      <label for="vectorExprCheckbox">Show Vector Expression</label>
+    </div>
+    <button type="button" id="drawButton">Draw Vector</button>
+    <button type="button" id="magnitudeButton" style="margin-left: 10px;">Show Magnitude</button>
+    <button type="button" id="resetButton" style="margin-left: 10px;">Reset</button>
+  </form>
+
+  <script type="text/javascript">
+    (function() {
+      let scene, vector, xComponent, yComponent;
+      let xLabel, yLabel, magnitudeLabel, exprLabel;
+
+      function init() {
+        scene = canvas();
+        scene.width = 800;
+        scene.height = 600;
+        scene.camera.pos = vec(0, 0, 20);
+
+        setupEventListeners();
+      }
+
+      function setupEventListeners() {
+        document.getElementById('drawButton').addEventListener('click', drawVector);
+        document.getElementById('resetButton').addEventListener('click', resetAll);
+        document.getElementById('magnitudeButton').addEventListener('click', showMagnitude);
+        document.getElementById('xComponentCheckbox').addEventListener('change', toggleComponents);
+        document.getElementById('yComponentCheckbox').addEventListener('change', toggleComponents);
+        document.getElementById('vectorExprCheckbox').addEventListener('change', toggleVectorExpr);
+      }
+
+      function drawVector() {
+        clearScene();
+
+        const x = Number(document.getElementById('xValue').value);
+        const y = Number(document.getElementById('yValue').value);
+
+        const axisXLength = Math.abs(x) * 1.5;
+        const axisYLength = Math.abs(y) * 1.5;
+
+        if (x > 0) {
+          arrow({pos: vec(0, 0, 0), axis: vec(axisXLength, 0, 0), color: color.blue, shaftwidth: 0.1});
+          label({pos: vec(axisXLength + 0.5, 0, 0), text: "X", height: 12, color: color.blue});
+        } else if (x < 0) {
+          arrow({pos: vec(0, 0, 0), axis: vec(-axisXLength, 0, 0), color: color.blue, shaftwidth: 0.1});
+          label({pos: vec(-axisXLength - 0.5, 0, 0), text: "X'", height: 12, color: color.blue});
+        }
+
+        if (y > 0) {
+          arrow({pos: vec(0, 0, 0), axis: vec(0, axisYLength, 0), color: color.green, shaftwidth: 0.1});
+          label({pos: vec(0, axisYLength + 0.5, 0), text: "Y", height: 12, color: color.green});
+        } else if (y < 0) {
+          arrow({pos: vec(0, 0, 0), axis: vec(0, -axisYLength, 0), color: color.green, shaftwidth: 0.1});
+          label({pos: vec(0, -axisYLength - 0.5, 0), text: "Y'", height: 12, color: color.green});
+        }
+
+        vector = arrow({
+          pos: vec(0,0,0),
+          axis: vec(x,y,0),
+          color: color.yellow,
+          shaftwidth: 0.2
+        });
+
+        label({
+          pos: vec(x,y,0),
+          text: `A(${x}, ${y})`,
+          color: color.white,
+          height: 12
+        });
+
+        toggleComponents();
+        toggleVectorExpr();  // draw expression if checkbox is checked
+      }
+
+      function toggleComponents() {
+        const x = Number(document.getElementById('xValue').value);
+        const y = Number(document.getElementById('yValue').value);
+
+        if (xComponent) xComponent.visible = false;
+        if (yComponent) yComponent.visible = false;
+        if (xLabel) xLabel.visible = false;
+        if (yLabel) yLabel.visible = false;
+
+        if (document.getElementById('xComponentCheckbox').checked) {
+          xComponent = cylinder({
+            pos: vec(0,y,0),
+            axis: vec(x,0,0),
+            color: color.cyan,
+            radius: 0.05,
+            opacity: 0.8
+          });
+          xLabel = label({
+            pos: vec(x/2,y,0),
+            text: `x = ${x}`,
+            color: color.cyan,
+            height: 10
+          });
+        }
+
+        if (document.getElementById('yComponentCheckbox').checked) {
+          yComponent = cylinder({
+            pos: vec(x,0,0),
+            axis: vec(0,y,0),
+            color: color.cyan,
+            radius: 0.05,
+            opacity: 0.8
+          });
+          yLabel = label({
+            pos: vec(x,y/2,0),
+            text: `y = ${y}`,
+            color: color.cyan,
+            height: 10
+          });
+        }
+      }
+
+      function toggleVectorExpr() {
+        const x = Number(document.getElementById('xValue').value);
+        const y = Number(document.getElementById('yValue').value);
+
+        if (exprLabel) exprLabel.visible = false;
+
+        if (document.getElementById('vectorExprCheckbox').checked) {
+          exprLabel = label({
+            pos: vec(x + 0.5, y + 0.5, 0),
+            text: `${x}i + ${y}j`,
+            color: color.white,
+            height: 10,
+            box: false,
+            opacity: 0
+          });
+        }
+      }
+
+      function showMagnitude() {
+        if (!vector) return;
+
+        const x = Number(document.getElementById('xValue').value);
+        const y = Number(document.getElementById('yValue').value);
+        const magnitude = Math.sqrt(x * x + y * y).toFixed(2);
+
+        if (magnitudeLabel) magnitudeLabel.visible = false;
+
+        magnitudeLabel = label({
+          pos: vec(x/2, y/2, 0),
+          text: `|A| = ${magnitude}`,
+          color: color.orange,
+          height: 12
+        });
+      }
+
+      function clearScene() {
+        for (let obj of scene.objects) {
+          obj.visible = false;
+        }
+        scene.objects.length = 0;
+        if (magnitudeLabel) magnitudeLabel.visible = false;
+        if (exprLabel) exprLabel.visible = false;
+      }
+
+      function resetAll() {
+        clearScene();
+
+        document.getElementById('xValue').value = '';
+        document.getElementById('yValue').value = '';
+        document.getElementById('xComponentCheckbox').checked = false;
+        document.getElementById('yComponentCheckbox').checked = false;
+        document.getElementById('vectorExprCheckbox').checked = false;
+
+        vector = null;
+        xComponent = null;
+        yComponent = null;
+        xLabel = null;
+        yLabel = null;
+        magnitudeLabel = null;
+        exprLabel = null;
+      }
+
+      window.__context = {
+        glowscript_container: $("#glowscript").removeAttr("id")
+      };
+      init();
+    })();
+  </script>
+</div>

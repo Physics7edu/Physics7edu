@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<div id="glowscript" class="glowscript">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <link type="text/css" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" rel="stylesheet" />
+  <link type="text/css" href="https://www.glowscript.org/css/ide.css" rel="stylesheet" />
+  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <form id="vectorForm" style="margin: 10px;">
+    <label>X:</label> <input type="number" id="xValue" value="3" step="0.1">
+    <label>Y:</label> <input type="number" id="yValue" value="4" step="0.1">
+    <label>Z:</label> <input type="number" id="zValue" value="2" step="0.1"><br><br>
+
+    <input type="checkbox" id="drawVec" checked> <label>Draw vector</label>
+    <input type="checkbox" id="drawNegVec"> <label>Draw negative vector</label>
+    <input type="checkbox" id="showMag"> <label>Show magnitude of both</label>
+    <input type="checkbox" id="showOppPt"> <label>Show Opposite point P'</label>
+    <br><br>
+
+    <button type="button" id="resetBtn" style="margin-left: 0px;">Reset</button>
+  </form>
+
+  <script type="text/javascript">
+    (function() {
+      let scene;
+      let vectorArrow, negVectorArrow;
+      let magLabel, negMagLabel, oppPt, oppPtLabel;
+
+      function init() {
+        scene = canvas();
+        scene.width = 800;
+        scene.height = 600;
+        scene.background = color.black;
+        scene.camera.pos = vec(0, 0, 20);
+        setupEvents();
+        drawAll();
+      }
+
+      function setupEvents() {
+        ['xValue', 'yValue', 'zValue', 'drawVec', 'drawNegVec', 'showMag', 'showOppPt'].forEach(id => {
+          document.getElementById(id).addEventListener('input', drawAll);
+          document.getElementById(id).addEventListener('change', drawAll);
+        });
+        document.getElementById('resetBtn').addEventListener('click', resetAll);
+      }
+
+      function drawAll() {
+        clearScene();
+
+        const x = parseFloat(document.getElementById('xValue').value) || 0;
+        const y = parseFloat(document.getElementById('yValue').value) || 0;
+        const z = parseFloat(document.getElementById('zValue').value) || 0;
+        const v = vec(x, y, z);
+        const vneg = vec(-x, -y, -z);
+
+        // Draw axes
+        const axisLen = 1.5 * Math.max(Math.abs(x), Math.abs(y), Math.abs(z), 1);
+        arrow({pos: vec(0,0,0), axis: vec(axisLen,0,0), color: color.blue, shaftwidth: 0.05});
+        label({pos: vec(axisLen+0.5,0,0), text: "X", color: color.blue});
+        arrow({pos: vec(0,0,0), axis: vec(0,axisLen,0), color: color.green, shaftwidth: 0.05});
+        label({pos: vec(0,axisLen+0.5,0), text: "Y", color: color.green});
+        arrow({pos: vec(0,0,0), axis: vec(0,0,axisLen), color: color.red, shaftwidth: 0.05});
+        label({pos: vec(0,0,axisLen+0.5), text: "Z", color: color.red});
+
+        // Draw original vector
+        if (document.getElementById('drawVec').checked) {
+          vectorArrow = arrow({
+            pos: vec(0, 0, 0),
+            axis: v,
+            color: color.yellow,
+            shaftwidth: 0.2
+          });
+          label({
+            pos: v.add(vec(0.3, -0.4, -0.3)),
+            text: `P(${x}, ${y}, ${z})`,
+            color: color.white,
+            height: 12
+          });
+        }
+
+        // Draw negative vector
+        if (document.getElementById('drawNegVec').checked) {
+          negVectorArrow = arrow({
+            pos: vec(0, 0, 0),
+            axis: vneg,
+            color: color.magenta,
+            shaftwidth: 0.2
+          });
+        }
+
+        // Show magnitude labels
+        if (document.getElementById('showMag').checked) {
+          if (document.getElementById('drawVec').checked) {
+            const mag = Math.sqrt(x*x + y*y + z*z).toFixed(2);
+            magLabel = label({
+              pos: v.multiply(0.5).add(vec(0.2,0.2,0)),
+              text: `|A| = ${mag}`,
+              color: color.orange,
+              height: 12
+            });
+          }
+          if (document.getElementById('drawNegVec').checked) {
+            const mag = Math.sqrt(x*x + y*y + z*z).toFixed(2);
+            negMagLabel = label({
+              pos: vneg.multiply(0.5).add(vec(-0.2,-0.2,0)),
+              text: `|−A| = ${mag}`,
+              color: color.orange,
+              height: 12
+            });
+          }
+        }
+
+        // Show opposite point P'
+        if (document.getElementById('showOppPt').checked && document.getElementById('drawNegVec').checked) {
+          oppPt = sphere({pos: vneg, radius: 0.15, color: color.magenta});
+          oppPtLabel = label({
+            pos: vneg.add(vec(-0.3, -0.4, -0.3)),
+            text: `P'(${(-x)}, ${(-y)}, ${(-z)})`,
+            color: color.magenta,
+            height: 12
+          });
+        }
+      }
+
+      function clearScene() {
+        if (!scene) return;
+        scene.objects.forEach(o => o.visible = false);
+        scene.objects.length = 0;
+        vectorArrow = negVectorArrow = magLabel = negMagLabel = oppPt = oppPtLabel = null;
+      }
+
+      function resetAll() {
+        document.getElementById('xValue').value = 3;
+        document.getElementById('yValue').value = 4;
+        document.getElementById('zValue').value = 2;
+        document.getElementById('drawVec').checked = true;
+        document.getElementById('drawNegVec').checked = false;
+        document.getElementById('showMag').checked = false;
+        document.getElementById('showOppPt').checked = false;
+        drawAll();
+      }
+
+      window.__context = {
+        glowscript_container: $("#glowscript").removeAttr("id")
+      };
+      init();
+    })();
+  </script>
+</div>

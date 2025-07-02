@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<div id="glowscript" class="glowscript">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <link type="text/css" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" rel="stylesheet" />
+  <link type="text/css" href="https://www.glowscript.org/css/ide.css" rel="stylesheet" />
+  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script type="text/javascript" src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <form id="vectorForm" style="margin: 10px;">
+    <label>X:</label> <input type="number" id="xValue" value="3" step="0.1">
+    <label>Y:</label> <input type="number" id="yValue" value="4" step="0.1">
+    <label>Z:</label> <input type="number" id="zValue" value="2" step="0.1"><br><br>
+
+    <input type="checkbox" id="xComp"> <label>X Component</label>
+    <input type="checkbox" id="yComp"> <label>Y Component</label>
+    <input type="checkbox" id="zComp"> <label>Z Component</label><br><br>
+
+    <input type="checkbox" id="exprToggle"> <label>Show Vector Expression</label><br><br>
+
+    <button type="button" id="drawBtn">Draw Vector</button>
+    <button type="button" id="magBtn" style="margin-left: 10px;">Show Magnitude</button>
+    <button type="button" id="resetBtn" style="margin-left: 10px;">Reset</button>
+  </form>
+
+  <script type="text/javascript">
+    (function() {
+      let scene, vectorArrow, xComp, yComp, zComp;
+      let xLabel, yLabel, zLabel, magLabel, exprLabel;
+      let planes = [];
+
+      function init() {
+        scene = canvas();
+        scene.width = 800;
+        scene.height = 600;
+        scene.background = color.black;
+        scene.camera.pos = vec(0, 0, 20);
+        setupEvents();
+      }
+
+      function setupEvents() {
+        document.getElementById('drawBtn').addEventListener('click', drawVector);
+        document.getElementById('magBtn').addEventListener('click', showMagnitude);
+        document.getElementById('resetBtn').addEventListener('click', resetAll);
+        ['xComp', 'yComp', 'zComp'].forEach(id => {
+          document.getElementById(id).addEventListener('change', drawComponents);
+        });
+        document.getElementById('exprToggle').addEventListener('change', toggleExpr);
+      }
+
+      function drawVector() {
+        clearScene();
+
+        const x = parseFloat(document.getElementById('xValue').value);
+        const y = parseFloat(document.getElementById('yValue').value);
+        const z = parseFloat(document.getElementById('zValue').value);
+        const axisLen = 1.5 * Math.max(Math.abs(x), Math.abs(y), Math.abs(z), 1);
+
+        if (x !== 0) {
+          arrow({pos: vec(0,0,0), axis: vec(x > 0 ? axisLen : -axisLen, 0, 0), color: color.blue, shaftwidth: 0.05});
+          label({pos: vec((x > 0 ? axisLen : -axisLen) + 0.5, 0, 0), text: x > 0 ? "X" : "X'", color: color.blue});
+        }
+        if (y !== 0) {
+          arrow({pos: vec(0,0,0), axis: vec(0, y > 0 ? axisLen : -axisLen, 0), color: color.green, shaftwidth: 0.05});
+          label({pos: vec(0, (y > 0 ? axisLen : -axisLen) + 0.5, 0), text: y > 0 ? "Y" : "Y'", color: color.green});
+        }
+        if (z !== 0) {
+          arrow({pos: vec(0,0,0), axis: vec(0, 0, z > 0 ? axisLen : -axisLen), color: color.red, shaftwidth: 0.05});
+          label({pos: vec(0, 0, (z > 0 ? axisLen : -axisLen) + 0.5), text: z > 0 ? "Z" : "Z'", color: color.red});
+        }
+
+        const xyPos = vec(x / 2, y / 2, 0);
+        const yzPos = vec(0, y / 2, z / 2);
+        const zxPos = vec(x / 2, 0, z / 2);
+
+        planes.push(box({pos: xyPos, size: vec(Math.abs(x), Math.abs(y), 0.01), color: color.cyan, opacity: 0.2}));
+        planes.push(box({pos: yzPos, size: vec(0.01, Math.abs(y), Math.abs(z)), color: color.green, opacity: 0.2}));
+        planes.push(box({pos: zxPos, size: vec(Math.abs(x), 0.01, Math.abs(z)), color: color.red, opacity: 0.2}));
+
+        vectorArrow = arrow({
+          pos: vec(0, 0, 0),
+          axis: vec(x, y, z),
+          color: color.yellow,
+          shaftwidth: 0.2
+        });
+
+        // Decluttered point label: slightly behind & below tip
+        label({
+          pos: vec(x, y, z).add(vec(0.3, -0.4, -0.3)),
+          text: `A(${x}, ${y}, ${z})`,
+          color: color.white,
+          height: 12
+        });
+
+        drawComponents();
+        toggleExpr();
+      }
+
+      function drawComponents() {
+        const x = parseFloat(document.getElementById('xValue').value);
+        const y = parseFloat(document.getElementById('yValue').value);
+        const z = parseFloat(document.getElementById('zValue').value);
+
+        [xComp, yComp, zComp, xLabel, yLabel, zLabel].forEach(obj => { if (obj) obj.visible = false; });
+
+        if (document.getElementById('xComp').checked) {
+          xComp = cylinder({pos: vec(0,y,z), axis: vec(x,0,0), radius: 0.05, color: color.cyan, opacity: 0.7});
+          xLabel = label({pos: vec(x/2,y,z), text: `x=${x}`, color: color.cyan});
+        }
+        if (document.getElementById('yComp').checked) {
+          yComp = cylinder({pos: vec(x,0,z), axis: vec(0,y,0), radius: 0.05, color: color.cyan, opacity: 0.7});
+          yLabel = label({pos: vec(x,y/2,z), text: `y=${y}`, color: color.cyan});
+        }
+        if (document.getElementById('zComp').checked) {
+          zComp = cylinder({pos: vec(x,y,0), axis: vec(0,0,z), radius: 0.05, color: color.cyan, opacity: 0.7});
+          zLabel = label({pos: vec(x,y,z/2), text: `z=${z}`, color: color.cyan});
+        }
+      }
+
+      function toggleExpr() {
+        const x = parseFloat(document.getElementById('xValue').value);
+        const y = parseFloat(document.getElementById('yValue').value);
+        const z = parseFloat(document.getElementById('zValue').value);
+
+        if (exprLabel) exprLabel.visible = false;
+
+        if (document.getElementById('exprToggle').checked) {
+          exprLabel = label({
+            pos: vec(x, y, z).add(vec(0.5, 0.6, 0.5)), // above & forward
+            text: `${x}i + ${y}j + ${z}k`,
+            color: color.white,
+            height: 10,
+            box: false,
+            opacity: 0
+          });
+        }
+      }
+
+      function showMagnitude() {
+        if (!vectorArrow) return;
+        const x = parseFloat(document.getElementById('xValue').value);
+        const y = parseFloat(document.getElementById('yValue').value);
+        const z = parseFloat(document.getElementById('zValue').value);
+        const r = Math.sqrt(x*x + y*y + z*z).toFixed(2);
+
+        if (magLabel) magLabel.visible = false;
+        magLabel = label({
+          pos: vec(x/2, y/2, z/2),
+          text: `|A| = ${r}`,
+          color: color.orange,
+          height: 12
+        });
+      }
+
+      function clearScene() {
+        for (let o of scene.objects) o.visible = false;
+        scene.objects.length = 0;
+        [xComp, yComp, zComp, xLabel, yLabel, zLabel, magLabel].forEach(v => v = null);
+        if (exprLabel) exprLabel.visible = false;
+        exprLabel = null;
+        planes = [];
+      }
+
+      function resetAll() {
+        clearScene();
+        document.getElementById('xValue').value = '';
+        document.getElementById('yValue').value = '';
+        document.getElementById('zValue').value = '';
+        ['xComp', 'yComp', 'zComp', 'exprToggle'].forEach(id => document.getElementById(id).checked = false);
+        vectorArrow = null;
+      }
+
+      window.__context = {
+        glowscript_container: $("#glowscript").removeAttr("id")
+      };
+      init();
+    })();
+  </script>
+</div>
