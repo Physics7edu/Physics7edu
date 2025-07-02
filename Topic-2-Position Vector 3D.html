@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Vector Visualizer</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css">
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css">
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+</head>
+<body>
+<div id="glowscript" class="glowscript"></div>
+
+<form id="vectorForm" style="margin: 10px;">
+  <label>X:</label> <input type="number" id="xValue" value="3" step="0.1">
+  <label>Y:</label> <input type="number" id="yValue" value="4" step="0.1">
+  <label>Z:</label> <input type="number" id="zValue" value="2" step="0.1"><br><br>
+
+  <input type="checkbox" id="xComp"> <label>X Component</label>
+  <input type="checkbox" id="yComp"> <label>Y Component</label>
+  <input type="checkbox" id="zComp"> <label>Z Component</label><br><br>
+
+  <input type="checkbox" id="exprToggle"> <label>Show Vector Expression</label><br><br>
+
+  <button type="button" id="drawBtn">Draw Vector</button>
+  <button type="button" id="magBtn" style="margin-left: 10px;">Show Magnitude</button>
+  <button type="button" id="resetBtn" style="margin-left: 10px;">Reset</button>
+</form>
+
+<script>
+window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+</script>
+
+<script>
+$(document).ready(function () {
+  let scene, vectorArrow, xComp, yComp, zComp;
+  let xLabel, yLabel, zLabel, magLabel, exprLabel;
+  let planes = [];
+
+  function init() {
+    scene = canvas();
+    scene.width = 800;
+    scene.height = 600;
+    scene.background = color.black;
+    scene.camera.pos = vec(0, 0, 20);
+    setupEvents();
+  }
+
+  function setupEvents() {
+    $('#drawBtn').click(drawVector);
+    $('#magBtn').click(showMagnitude);
+    $('#resetBtn').click(resetAll);
+    ['xComp', 'yComp', 'zComp'].forEach(id => {
+      $('#' + id).change(drawComponents);
+    });
+    $('#exprToggle').change(toggleExpr);
+  }
+
+  function drawVector() {
+    clearScene();
+    const x = parseFloat($('#xValue').val());
+    const y = parseFloat($('#yValue').val());
+    const z = parseFloat($('#zValue').val());
+    const axisLen = 1.5 * Math.max(Math.abs(x), Math.abs(y), Math.abs(z), 1);
+
+    if (x !== 0)
+      arrow({ pos: vec(0, 0, 0), axis: vec(x > 0 ? axisLen : -axisLen, 0, 0), color: color.blue, shaftwidth: 0.05 });
+    if (y !== 0)
+      arrow({ pos: vec(0, 0, 0), axis: vec(0, y > 0 ? axisLen : -axisLen, 0), color: color.green, shaftwidth: 0.05 });
+    if (z !== 0)
+      arrow({ pos: vec(0, 0, 0), axis: vec(0, 0, z > 0 ? axisLen : -axisLen), color: color.red, shaftwidth: 0.05 });
+
+    vectorArrow = arrow({ pos: vec(0, 0, 0), axis: vec(x, y, z), color: color.yellow, shaftwidth: 0.2 });
+
+    planes.push(box({ pos: vec(x / 2, y / 2, 0), size: vec(Math.abs(x), Math.abs(y), 0.01), color: color.cyan, opacity: 0.2 }));
+    planes.push(box({ pos: vec(0, y / 2, z / 2), size: vec(0.01, Math.abs(y), Math.abs(z)), color: color.green, opacity: 0.2 }));
+    planes.push(box({ pos: vec(x / 2, 0, z / 2), size: vec(Math.abs(x), 0.01, Math.abs(z)), color: color.red, opacity: 0.2 }));
+
+    label({ pos: vec(x, y, z).add(vec(0.3, -0.4, -0.3)), text: `A(${x}, ${y}, ${z})`, color: color.white, height: 12 });
+
+    drawComponents();
+    toggleExpr();
+  }
+
+  function drawComponents() {
+    const x = parseFloat($('#xValue').val());
+    const y = parseFloat($('#yValue').val());
+    const z = parseFloat($('#zValue').val());
+    [xComp, yComp, zComp, xLabel, yLabel, zLabel].forEach(obj => { if (obj) obj.visible = false; });
+
+    if ($('#xComp').is(':checked')) {
+      xComp = cylinder({ pos: vec(0, y, z), axis: vec(x, 0, 0), radius: 0.05, color: color.cyan, opacity: 0.7 });
+      xLabel = label({ pos: vec(x / 2, y, z), text: `x=${x}`, color: color.cyan });
+    }
+    if ($('#yComp').is(':checked')) {
+      yComp = cylinder({ pos: vec(x, 0, z), axis: vec(0, y, 0), radius: 0.05, color: color.cyan, opacity: 0.7 });
+      yLabel = label({ pos: vec(x, y / 2, z), text: `y=${y}`, color: color.cyan });
+    }
+    if ($('#zComp').is(':checked')) {
+      zComp = cylinder({ pos: vec(x, y, 0), axis: vec(0, 0, z), radius: 0.05, color: color.cyan, opacity: 0.7 });
+      zLabel = label({ pos: vec(x, y, z / 2), text: `z=${z}`, color: color.cyan });
+    }
+  }
+
+  function toggleExpr() {
+    const x = parseFloat($('#xValue').val());
+    const y = parseFloat($('#yValue').val());
+    const z = parseFloat($('#zValue').val());
+    if (exprLabel) exprLabel.visible = false;
+
+    if ($('#exprToggle').is(':checked')) {
+      exprLabel = label({
+        pos: vec(x + 0.5, y + 0.6, z + 0.5),
+        text: `${x}i + ${y}j + ${z}k`,
+        color: color.white,
+        height: 10,
+        box: false,
+        opacity: 0
+      });
+    }
+  }
+
+  function showMagnitude() {
+    if (!vectorArrow) return;
+    const x = parseFloat($('#xValue').val());
+    const y = parseFloat($('#yValue').val());
+    const z = parseFloat($('#zValue').val());
+    const mag = Math.sqrt(x * x + y * y + z * z).toFixed(2);
+    if (magLabel) magLabel.visible = false;
+
+    magLabel = label({ pos: vec(x / 2, y / 2, z / 2), text: `|A| = ${mag}`, color: color.orange, height: 12 });
+  }
+
+  function clearScene() {
+    for (let obj of scene.objects) obj.visible = false;
+    scene.objects.length = 0;
+    [xComp, yComp, zComp, xLabel, yLabel, zLabel, magLabel].forEach(o => o = null);
+    if (exprLabel) exprLabel.visible = false;
+    exprLabel = null;
+    planes = [];
+  }
+
+  function resetAll() {
+    clearScene();
+    $('#xValue').val('');
+    $('#yValue').val('');
+    $('#zValue').val('');
+    ['#xComp', '#yComp', '#zComp', '#exprToggle'].forEach(id => $(id).prop('checked', false));
+    vectorArrow = null;
+  }
+
+  init();
+});
+</script>
+</body>
+</html>
