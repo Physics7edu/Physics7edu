@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vector Comparison</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    #vectorForm {
+      background: white;
+      color: black;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 12px;
+      font-size: 14px;
+    }
+
+    label {
+      margin-right: 10px;
+    }
+
+    #result {
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #glowscript {
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="glowscript" class="glowscript"></div>
+
+  <form id="vectorForm">
+    A(x₁, y₁, z₁): <input type="number" id="x1" value="1" step="0.1">
+    <input type="number" id="y1" value="2" step="0.1">
+    <input type="number" id="z1" value="0" step="0.1">
+    &nbsp;&nbsp;
+    B(x₂, y₂, z₂): <input type="number" id="x2" value="4" step="0.1">
+    <input type="number" id="y2" value="5" step="0.1">
+    <input type="number" id="z2" value="0" step="0.1"><br><br>
+
+    C(x₃, y₃, z₃): <input type="number" id="x3" value="0" step="0.1">
+    <input type="number" id="y3" value="0" step="0.1">
+    <input type="number" id="z3" value="0" step="0.1">
+    &nbsp;&nbsp;
+    D(x₄, y₄, z₄): <input type="number" id="x4" value="3" step="0.1">
+    <input type="number" id="y4" value="3" step="0.1">
+    <input type="number" id="z4" value="0" step="0.1"><br><br>
+
+    <input type="checkbox" id="drawAB"> <label for="drawAB">Draw AB</label>
+    <input type="checkbox" id="labelAB"> <label for="labelAB">Label AB</label>
+    <input type="checkbox" id="drawCD"> <label for="drawCD">Draw CD</label>
+    <input type="checkbox" id="labelCD"> <label for="labelCD">Label CD</label>
+    <input type="checkbox" id="labelA"> <label for="labelA">Label A</label>
+    <input type="checkbox" id="labelB"> <label for="labelB">Label B</label>
+    <input type="checkbox" id="labelC"> <label for="labelC">Label C</label>
+    <input type="checkbox" id="labelD"> <label for="labelD">Label D</label>
+    <button type="button" id="resetBtn">Reset</button>
+    <button type="button" id="compareBtn">Compare</button>
+
+    <div id="result" style="color: black;"></div>
+  </form>
+
+  <script type="text/javascript">
+    (function() {
+      let scene;
+
+      function init() {
+        window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+        scene = canvas();
+        scene.width = 800;
+        scene.height = 600;
+        scene.background = color.black;
+        scene.camera.pos = vec(0, 0, 20);
+        setupEvents();
+        drawAll();
+      }
+
+      function setupEvents() {
+        document.getElementById('resetBtn').addEventListener('click', resetScene);
+        document.getElementById('compareBtn').addEventListener('click', compareVectors);
+        [
+          'x1','y1','z1','x2','y2','z2','x3','y3','z3','x4','y4','z4'
+        ].forEach(id => {
+          document.getElementById(id).addEventListener('input', drawAll);
+        });
+        [
+          'drawAB','drawCD','labelAB','labelCD','labelA','labelB','labelC','labelD'
+        ].forEach(id => {
+          document.getElementById(id).addEventListener('change', drawAll);
+        });
+      }
+
+      function resetScene() {
+        scene.objects.forEach(o => o.visible = false);
+        scene.objects.length = 0;
+        document.getElementById('result').innerHTML = "";
+        [
+          'drawAB','drawCD','labelAB','labelCD','labelA','labelB','labelC','labelD'
+        ].forEach(id => {
+          document.getElementById(id).checked = false;
+        });
+      }
+
+      function drawAxes(maxVal) {
+        const len = 1.2 * maxVal;
+        arrow({ pos: vec(-len, 0, 0), axis: vec(2 * len, 0, 0), color: color.white, shaftwidth: 0.06 });
+        label({ pos: vec(len + 0.5, 0, 0), text: "X", color: color.white });
+        arrow({ pos: vec(0, -len, 0), axis: vec(0, 2 * len, 0), color: color.white, shaftwidth: 0.06 });
+        label({ pos: vec(0, len + 0.5, 0), text: "Y", color: color.white });
+        arrow({ pos: vec(0, 0, -len), axis: vec(0, 0, 2 * len), color: color.white, shaftwidth: 0.06 });
+        label({ pos: vec(0, 0, len + 0.5), text: "Z", color: color.white });
+      }
+
+      function drawAll() {
+        scene.objects.forEach(o => o.visible = false);
+        scene.objects.length = 0;
+        document.getElementById('result').innerHTML = "";
+
+        const x1 = parseFloat(document.getElementById('x1').value);
+        const y1 = parseFloat(document.getElementById('y1').value);
+        const z1 = parseFloat(document.getElementById('z1').value);
+        const x2 = parseFloat(document.getElementById('x2').value);
+        const y2 = parseFloat(document.getElementById('y2').value);
+        const z2 = parseFloat(document.getElementById('z2').value);
+        const x3 = parseFloat(document.getElementById('x3').value);
+        const y3 = parseFloat(document.getElementById('y3').value);
+        const z3 = parseFloat(document.getElementById('z3').value);
+        const x4 = parseFloat(document.getElementById('x4').value);
+        const y4 = parseFloat(document.getElementById('y4').value);
+        const z4 = parseFloat(document.getElementById('z4').value);
+
+        const A = vec(x1, y1, z1), B = vec(x2, y2, z2);
+        const C = vec(x3, y3, z3), D = vec(x4, y4, z4);
+        const AB = B.sub(A), CD = D.sub(C);
+
+        const maxVal = Math.max(
+          Math.abs(x1), Math.abs(y1), Math.abs(z1),
+          Math.abs(x2), Math.abs(y2), Math.abs(z2),
+          Math.abs(x3), Math.abs(y3), Math.abs(z3),
+          Math.abs(x4), Math.abs(y4), Math.abs(z4), 5
+        );
+        drawAxes(maxVal);
+
+        if (document.getElementById('drawAB').checked) {
+          arrow({ pos: A, axis: AB, color: color.yellow, shaftwidth: 0.2 });
+          if (document.getElementById('labelAB').checked)
+            label({ pos: A.add(AB.multiply(0.5)), text: `AB = ${AB.x}i + ${AB.y}j + ${AB.z}k`, color: color.yellow, box: false });
+          if (document.getElementById('labelA').checked)
+            label({ pos: A.add(vec(0.3, 0.3, 0.3)), text: `A(${A.x},${A.y},${A.z})`, color: color.white, box: false });
+          if (document.getElementById('labelB').checked)
+            label({ pos: B.add(vec(0.3, 0.3, 0.3)), text: `B(${B.x},${B.y},${B.z})`, color: color.white, box: false });
+        }
+
+        if (document.getElementById('drawCD').checked) {
+          arrow({ pos: C, axis: CD, color: color.cyan, shaftwidth: 0.2 });
+          if (document.getElementById('labelCD').checked)
+            label({ pos: C.add(CD.multiply(0.5)), text: `CD = ${CD.x}i + ${CD.y}j + ${CD.z}k`, color: color.cyan, box: false });
+          if (document.getElementById('labelC').checked)
+            label({ pos: C.add(vec(0.3, 0.3, 0.3)), text: `C(${C.x},${C.y},${C.z})`, color: color.white, box: false });
+          if (document.getElementById('labelD').checked)
+            label({ pos: D.add(vec(0.3, 0.3, 0.3)), text: `D(${D.x},${D.y},${D.z})`, color: color.white, box: false });
+        }
+      }
+
+      function compareVectors() {
+        const x1 = parseFloat(document.getElementById('x1').value);
+        const y1 = parseFloat(document.getElementById('y1').value);
+        const z1 = parseFloat(document.getElementById('z1').value);
+        const x2 = parseFloat(document.getElementById('x2').value);
+        const y2 = parseFloat(document.getElementById('y2').value);
+        const z2 = parseFloat(document.getElementById('z2').value);
+        const x3 = parseFloat(document.getElementById('x3').value);
+        const y3 = parseFloat(document.getElementById('y3').value);
+        const z3 = parseFloat(document.getElementById('z3').value);
+        const x4 = parseFloat(document.getElementById('x4').value);
+        const y4 = parseFloat(document.getElementById('y4').value);
+        const z4 = parseFloat(document.getElementById('z4').value);
+
+        const AB = vec(x2 - x1, y2 - y1, z2 - z1);
+        const CD = vec(x4 - x3, y4 - y3, z4 - z3);
+
+        const isEqual = (AB.x === CD.x) && (AB.y === CD.y) && (AB.z === CD.z);
+        document.getElementById('result').innerHTML = isEqual
+          ? '<span style="color: black;">Vector AB is equal to Vector CD</span>'
+          : '<span style="color: black;">Vector AB is not equal to Vector CD</span>';
+      }
+
+      init();
+    })();
+  </script>
+
+</body>
+</html>
