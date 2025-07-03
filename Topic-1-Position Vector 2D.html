@@ -1,12 +1,17 @@
 <!DOCTYPE html>
-<div id="glowscript" class="glowscript">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <link type="text/css" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" rel="stylesheet" />
-  <link type="text/css" href="https://www.glowscript.org/css/ide.css" rel="stylesheet" />
-  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
-  <script type="text/javascript" src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
-  <script type="text/javascript" src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
-  <script type="text/javascript" src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>2D Vector Visualizer</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css">
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css">
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+</head>
+<body>
+  <div id="glowscript" class="glowscript"></div>
 
   <form id="vectorForm" style="margin: 10px;">
     <div style="margin-bottom: 10px;">
@@ -28,7 +33,13 @@
     <button type="button" id="resetButton" style="margin-left: 10px;">Reset</button>
   </form>
 
-  <script type="text/javascript">
+  <script>
+    window.__context = {
+      glowscript_container: $("#glowscript").removeAttr("id")
+    };
+  </script>
+
+  <script>
     (function() {
       let scene, vector, xComponent, yComponent;
       let xLabel, yLabel, magnitudeLabel, exprLabel;
@@ -60,38 +71,32 @@
         const axisXLength = Math.abs(x) * 1.5;
         const axisYLength = Math.abs(y) * 1.5;
 
-        if (x > 0) {
-          arrow({pos: vec(0, 0, 0), axis: vec(axisXLength, 0, 0), color: color.blue, shaftwidth: 0.1});
-          label({pos: vec(axisXLength + 0.5, 0, 0), text: "X", height: 12, color: color.blue});
-        } else if (x < 0) {
-          arrow({pos: vec(0, 0, 0), axis: vec(-axisXLength, 0, 0), color: color.blue, shaftwidth: 0.1});
-          label({pos: vec(-axisXLength - 0.5, 0, 0), text: "X'", height: 12, color: color.blue});
+        if (x !== 0) {
+          arrow({pos: vec(0, 0, 0), axis: vec(x, 0, 0), color: color.blue, shaftwidth: 0.1});
+          label({pos: vec(x + Math.sign(x)*0.5, 0, 0), text: x > 0 ? "X" : "X'", height: 12, color: color.blue});
         }
 
-        if (y > 0) {
-          arrow({pos: vec(0, 0, 0), axis: vec(0, axisYLength, 0), color: color.green, shaftwidth: 0.1});
-          label({pos: vec(0, axisYLength + 0.5, 0), text: "Y", height: 12, color: color.green});
-        } else if (y < 0) {
-          arrow({pos: vec(0, 0, 0), axis: vec(0, -axisYLength, 0), color: color.green, shaftwidth: 0.1});
-          label({pos: vec(0, -axisYLength - 0.5, 0), text: "Y'", height: 12, color: color.green});
+        if (y !== 0) {
+          arrow({pos: vec(0, 0, 0), axis: vec(0, y, 0), color: color.green, shaftwidth: 0.1});
+          label({pos: vec(0, y + Math.sign(y)*0.5, 0), text: y > 0 ? "Y" : "Y'", height: 12, color: color.green});
         }
 
         vector = arrow({
-          pos: vec(0,0,0),
-          axis: vec(x,y,0),
+          pos: vec(0, 0, 0),
+          axis: vec(x, y, 0),
           color: color.yellow,
           shaftwidth: 0.2
         });
 
         label({
-          pos: vec(x,y,0),
+          pos: vec(x, y, 0),
           text: `A(${x}, ${y})`,
           color: color.white,
           height: 12
         });
 
         toggleComponents();
-        toggleVectorExpr();  // draw expression if checkbox is checked
+        toggleVectorExpr();
       }
 
       function toggleComponents() {
@@ -105,14 +110,14 @@
 
         if (document.getElementById('xComponentCheckbox').checked) {
           xComponent = cylinder({
-            pos: vec(0,y,0),
-            axis: vec(x,0,0),
+            pos: vec(0, y, 0),
+            axis: vec(x, 0, 0),
             color: color.cyan,
             radius: 0.05,
             opacity: 0.8
           });
           xLabel = label({
-            pos: vec(x/2,y,0),
+            pos: vec(x / 2, y, 0),
             text: `x = ${x}`,
             color: color.cyan,
             height: 10
@@ -121,14 +126,14 @@
 
         if (document.getElementById('yComponentCheckbox').checked) {
           yComponent = cylinder({
-            pos: vec(x,0,0),
-            axis: vec(0,y,0),
+            pos: vec(x, 0, 0),
+            axis: vec(0, y, 0),
             color: color.cyan,
             radius: 0.05,
             opacity: 0.8
           });
           yLabel = label({
-            pos: vec(x,y/2,0),
+            pos: vec(x, y / 2, 0),
             text: `y = ${y}`,
             color: color.cyan,
             height: 10
@@ -164,7 +169,7 @@
         if (magnitudeLabel) magnitudeLabel.visible = false;
 
         magnitudeLabel = label({
-          pos: vec(x/2, y/2, 0),
+          pos: vec(x / 2, y / 2, 0),
           text: `|A| = ${magnitude}`,
           color: color.orange,
           height: 12
@@ -198,10 +203,8 @@
         exprLabel = null;
       }
 
-      window.__context = {
-        glowscript_container: $("#glowscript").removeAttr("id")
-      };
       init();
     })();
   </script>
-</div>
+</body>
+</html>
