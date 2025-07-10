@@ -2,48 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Physic7.com</title>
+  <title>Physics7.com</title>
   <style>
     body {
       font-family: sans-serif;
       background-color: #f0f8ff;
       padding: 30px;
-      max-width: 800px;
+      max-width: 900px;
       margin: auto;
     }
+
     h1 {
       color: #333;
       border-bottom: 2px solid #ccc;
       padding-bottom: 10px;
     }
+
+    details.chapter {
+      margin: 20px 0;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      background: #fff;
+      padding: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+
+    summary.chapter-title {
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #0055aa;
+    }
+
+    details.subchapter {
+      margin: 10px 0 0 20px;
+      padding-left: 10px;
+    }
+
+    summary.subchapter-title {
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #0077cc;
+    }
+
     ul {
       list-style: none;
-      padding: 0;
+      padding-left: 25px;
+      margin: 8px 0;
     }
+
     li {
-      margin: 15px 0;
+      margin: 6px 0;
     }
+
     a {
       text-decoration: none;
-      font-size: 18px;
-      color: #0066cc;
+      font-size: 15px;
+      color: #003366;
     }
+
     a:hover {
       text-decoration: underline;
     }
   </style>
 </head>
 <body>
-  <h1>Visualise The Physics</h1>
-  <ul>
-    <li><a href="Topic-1-Position%20Vector%202D.html" target="_blank">Topic 1: Position Vector (2D)</a></li>
-    <li><a href="Topic-2-Position%20Vector%203D.html" target="_blank">Topic 2: Position Vector (3D)</a></li>
-    <li><a href="Topic-3-Displacement%20Vector%202D.html" target="_blank">Topic 3: Displacement Vector (2D)</a></li>
-    <li><a href="Topic-4-Displacement%20Vector%203D.html" target="_blank">Topic 4: Displacement Vector (3D)</a></li>
-    <li><a href="Topic-5-Check-Vector-Equality.html" target="_blank">Topic 5: Check Equality of Vectors</a></li>
-     <li><a href="Topic-6-Equal-Vector-2D.html" target="_blank">Topic 6: Equal Vectors(2D)</a></li>
-     <li><a href="Topic-7-Equal-Vector-3D.html" target="_blank">Topic 7: Equal Vectors(3D)</a></li>
+  <h1>Visualise the Physics</h1>
 
-  </ul>
+  <!-- Chapter 1: Vectors -->
+  <details class="chapter" open>
+    <summary class="chapter-title">Chapter 1: Vectors</summary>
+
+    <!-- Subchapter 1.1 -->
+    <details class="subchapter" open>
+      <summary class="subchapter-title">1.1 Position Vectors</summary>
+      <ul>
+        <li><a href="Topic-1-Position%20Vector%202D.html" target="_blank">Topic 1: Position Vector (2D)</a></li>
+        <li><a href="Topic-2-Position%20Vector%203D.html" target="_blank">Topic 2: Position Vector (3D)</a></li>
+      </ul>
+    </details>
+
+    <!-- Subchapter 1.2 -->
+    <details class="subchapter">
+      <summary class="subchapter-title">1.2 Displacement Vectors</summary>
+      <ul>
+        <li><a href="Topic-3-Displacement%20Vector%202D.html" target="_blank">Topic 3: Displacement Vector (2D)</a></li>
+        <li><a href="Topic-4-Displacement%20Vector%203D.html" target="_blank">Topic 4: Displacement Vector (3D)</a></li>
+      </ul>
+    </details>
+
+    <!-- Subchapter 1.3 -->
+    <details class="subchapter">
+      <summary class="subchapter-title">1.3 Vector Equality</summary>
+      <ul>
+        <li><a href="Topic-5-Check-Vector-Equality.html" target="_blank">Topic 5: Check Equality of Vectors</a></li>
+        <li><a href="Topic-6-Equal-Vector-2D.html" target="_blank">Topic 6: Equal Vectors (2D)</a></li>
+        <li><a href="Topic-7-Equal-Vector-3D.html" target="_blank">Topic 7: Equal Vectors (3D)</a></li>
+      </ul>
+    </details>
+  </details>
+
+  <!-- Chapter 2: Motion -->
+  <details class="chapter">
+    <summary class="chapter-title">Chapter 2: Motion in 1D</summary>
+
+    <details class="subchapter">
+      <summary class="subchapter-title">2.1 Graphical Motion</summary>
+      <ul>
+        <li><a href="Topic-1-Position-Time-Graph.html" target="_blank">Topic 1: Position-Time Graph</a></li>
+        <li><a href="Topic-2-Velocity-Time-Graph.html" target="_blank">Topic 2: Velocity-Time Graph</a></li>
+      </ul>
+    </details>
+
+    <details class="subchapter">
+      <summary class="subchapter-title">2.2 Uniform Motion</summary>
+      <ul>
+        <li><a href="Topic-3-Uniform-Motion.html" target="_blank">Topic 3: Uniform Motion</a></li>
+        <li><a href="Topic-4-Non-Uniform-Motion.html" target="_blank">Topic 4: Non-Uniform Motion</a></li>
+      </ul>
+    </details>
+  </details>
+
 </body>
 </html>
