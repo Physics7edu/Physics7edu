@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Unit Vector Visualizer 3D</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f7fa;
+      padding: 20px;
+      margin: 0;
+    }
+    form {
+      background: #ffffff;
+      padding: 15px 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+      max-width: 1000px;
+    }
+    label {
+      margin-right: 5px;
+      font-weight: 500;
+    }
+    input[type="number"] {
+      width: 60px;
+      margin-right: 10px;
+      padding: 3px;
+    }
+    button {
+      padding: 6px 14px;
+      border-radius: 6px;
+      background: #007acc;
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      margin-right: 10px;
+    }
+    button:hover {
+      background: #005f99;
+    }
+    .glowscript {
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="glowscript" class="glowscript"></div>
+
+  <form>
+    <label>A(x, y, z):</label>
+    <input type="number" id="ax" value="1" step="0.1">
+    <input type="number" id="ay" value="2" step="0.1">
+    <input type="number" id="az" value="0" step="0.1"> &nbsp;&nbsp;
+    <label>B(x, y, z):</label>
+    <input type="number" id="bx" value="4" step="0.1">
+    <input type="number" id="by" value="5" step="0.1">
+    <input type="number" id="bz" value="3" step="0.1"><br><br>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+      <label><input type="checkbox" id="showA"> Show Point A</label>
+      <label><input type="checkbox" id="showB"> Show Point B</label>
+      <label><input type="checkbox" id="drawAB"> Draw AB</label>
+      <label><input type="checkbox" id="labelMagAB"> Label |AB|</label>
+      <label><input type="checkbox" id="drawUnitAB"> Draw Unit Vector (AB)</label>
+      <label><input type="checkbox" id="labelMagUnitAB"> Label |Unit AB|</label>
+      <label><input type="checkbox" id="showExprAB"> Show AB as xi+yj+zk</label>
+      <label><input type="checkbox" id="showExprUnitAB"> Show Unit AB as xi+yj+zk</label>
+    </div><br>
+
+    <button type="button" onclick="resetScene()">Reset</button>
+    <button type="button" onclick="restoreXYView()">Restore XY View</button>
+  </form>
+
+  <script type="text/javascript">
+    window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+    (function () {
+      let scene, objs = {};
+
+      function init() {
+        scene = canvas({ width: 900, height: 600, background: color.black });
+        drawAxes(10);
+        setupEvents();
+      }
+
+      function drawAxes(len) {
+        arrow({ pos: vec(-len, 0, 0), axis: vec(2 * len, 0, 0), color: color.red, shaftwidth: 0.05 });
+        label({ pos: vec(len + 0.5, 0, 0), text: "X", color: color.red });
+        label({ pos: vec(-len - 0.5, 0, 0), text: "X'", color: color.red });
+
+        arrow({ pos: vec(0, -len, 0), axis: vec(0, 2 * len, 0), color: color.green, shaftwidth: 0.05 });
+        label({ pos: vec(0, len + 0.5, 0), text: "Y", color: color.green });
+        label({ pos: vec(0, -len - 0.5, 0), text: "Y'", color: color.green });
+
+        arrow({ pos: vec(0, 0, -len), axis: vec(0, 0, 2 * len), color: color.blue, shaftwidth: 0.05 });
+        label({ pos: vec(0, 0, len + 0.5), text: "Z", color: color.blue });
+        label({ pos: vec(0, 0, -len - 0.5), text: "Z'", color: color.blue });
+      }
+
+      window.resetScene = function () {
+        scene.objects.forEach(obj => obj.visible = false);
+        scene.objects.length = 0;
+        objs = {};
+        drawAxes(10);
+        ["ax", "ay", "az", "bx", "by", "bz"].forEach(id => document.getElementById(id).value = "");
+        document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+      };
+
+      window.restoreXYView = function () {
+        scene.camera.pos = vec(0, 0, 20);
+        scene.forward = vec(0, 0, -1);
+        scene.up = vec(0, 1, 0);
+      };
+
+      function setupEvents() {
+        const ids = ["showA", "showB", "drawAB", "labelMagAB", "drawUnitAB", "labelMagUnitAB", "showExprAB", "showExprUnitAB"];
+        ids.forEach(id => document.getElementById(id).addEventListener("change", handleAction));
+      }
+
+      function handleAction(e) {
+        const A = vec(parseFloat(ax.value), parseFloat(ay.value), parseFloat(az.value));
+        const B = vec(parseFloat(bx.value), parseFloat(by.value), parseFloat(bz.value));
+        const AB = B.sub(A);
+        const ABmag = AB.mag;
+        const unit = ABmag === 0 ? vec(0, 0, 0) : AB.norm();
+
+        const remove = (name) => {
+          if (objs[name]) {
+            objs[name].visible = false;
+            delete objs[name];
+          }
+        };
+
+        const id = e.target.id;
+        const checked = e.target.checked;
+
+        if (id === "showA") {
+          if (checked && !objs.A) {
+            objs.A = sphere({ pos: A, radius: 0.2, color: color.red });
+            objs.labelA = label({ pos: A.add(vec(0.5, 0.5, 0.5)), text: `A(${A.x}, ${A.y}, ${A.z})`, height: 14 });
+          } else { remove("A"); remove("labelA"); }
+        }
+
+        if (id === "showB") {
+          if (checked && !objs.B) {
+            objs.B = sphere({ pos: B, radius: 0.2, color: color.red });
+            objs.labelB = label({ pos: B.add(vec(0.5, 0.5, 0.5)), text: `B(${B.x}, ${B.y}, ${B.z})`, height: 14 });
+          } else { remove("B"); remove("labelB"); }
+        }
+
+        if (id === "drawAB") {
+          if (checked && !objs.AB)
+            objs.AB = arrow({ pos: A, axis: AB, color: color.yellow, shaftwidth: 0.12 });
+          else remove("AB");
+        }
+
+        if (id === "labelMagAB") {
+          if (checked && !objs.labelMagAB) {
+            const mid = A.add(AB.multiply(0.5));
+            objs.labelMagAB = label({ pos: mid, text: `|AB| = ${ABmag.toFixed(2)}`, color: color.yellow });
+          } else remove("labelMagAB");
+        }
+
+        if (id === "drawUnitAB") {
+          if (checked && !objs.unit)
+            objs.unit = arrow({ pos: A, axis: unit, color: color.cyan, shaftwidth: 0.1 });
+          else remove("unit");
+        }
+
+        if (id === "labelMagUnitAB") {
+          if (checked && !objs.labelMagUnitAB) {
+            const mid = A.add(unit.multiply(0.5));
+            objs.labelMagUnitAB = label({ pos: mid, text: "|Unit AB| = 1.00", color: color.cyan });
+          } else remove("labelMagUnitAB");
+        }
+
+        if (id === "showExprAB") {
+          if (checked && !objs.exprAB) {
+            objs.exprAB = label({ pos: vec(-9, 9, 0), text: `AB = ${AB.x.toFixed(2)}i + ${AB.y.toFixed(2)}j + ${AB.z.toFixed(2)}k`, color: color.orange });
+          } else remove("exprAB");
+        }
+
+        if (id === "showExprUnitAB") {
+          if (checked && !objs.exprUnitAB) {
+            objs.exprUnitAB = label({ pos: vec(-9, 8, 0), text: `Unit AB = ${unit.x.toFixed(2)}i + ${unit.y.toFixed(2)}j + ${unit.z.toFixed(2)}k`, color: color.cyan });
+          } else remove("exprUnitAB");
+        }
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
