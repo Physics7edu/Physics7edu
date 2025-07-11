@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Direction With Axis-3D (with Arcs)</title>
+
+  <!-- GlowScript Dependencies -->
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+    }
+    .ui-wrapper {
+      display: flex;
+      flex-direction: row;
+      gap: 20px;
+      padding: 20px;
+    }
+    .form-container {
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      min-width: 280px;
+      height: fit-content;
+    }
+    .form-container input[type="number"] {
+      width: 60px;
+      padding: 5px;
+      margin-right: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    .form-container button {
+      padding: 8px 16px;
+      margin-top: 12px;
+      margin-right: 10px;
+      border-radius: 10px;
+      border: none;
+      background-color: #4CAF50;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .form-container button:hover {
+      background-color: #45a049;
+    }
+    #glowscript {
+      flex-grow: 1;
+    }
+    #glowscript > canvas {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="ui-wrapper">
+    <div class="form-container">
+      <label>P(x, y, z):</label><br>
+      <input type="number" id="px" value="3" step="0.1">
+      <input type="number" id="py" value="4" step="0.1">
+      <input type="number" id="pz" value="5" step="0.1">
+
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+        <label><input type="checkbox" id="drawVec"> Draw OP</label>
+        <label><input type="checkbox" id="labelP"> Label Point P(x, y, z)</label>
+        <label><input type="checkbox" id="labelVec"> Label Vector OP</label>
+        <label><input type="checkbox" id="angleX"> Angle with X-axis</label>
+        <label><input type="checkbox" id="angleY"> Angle with Y-axis</label>
+        <label><input type="checkbox" id="angleZ"> Angle with Z-axis</label>
+      </div>
+
+      <div style="margin-top: 15px;">
+        <button onclick="resetScene()">Reset</button>
+        <button onclick="resetView()">Reset View to XY</button>
+      </div>
+    </div>
+
+    <div id="glowscript" class="glowscript"></div>
+  </div>
+
+  <script type="text/javascript">
+    (function () {
+      let scene;
+      function init() {
+        scene = canvas({ width: 800, height: 600, background: color.black, center: vec(0, 0, 0) });
+        resetView();
+        drawAxes(10);
+        setupEvents();
+        drawScene();
+      }
+
+      function drawAxes(len) {
+        const shaft = 0.03;
+        arrow({ pos: vec(-len, 0, 0), axis: vec(2 * len, 0, 0), color: color.white, shaftwidth: shaft });
+        arrow({ pos: vec(0, -len, 0), axis: vec(0, 2 * len, 0), color: color.white, shaftwidth: shaft });
+        arrow({ pos: vec(0, 0, -len), axis: vec(0, 0, 2 * len), color: color.white, shaftwidth: shaft });
+
+        label({ pos: vec(len + 0.5, 0, 0), text: "X", color: color.white });
+        label({ pos: vec(-len - 0.5, 0, 0), text: "X'", color: color.white });
+        label({ pos: vec(0, len + 0.5, 0), text: "Y", color: color.white });
+        label({ pos: vec(0, -len - 0.5, 0), text: "Y'", color: color.white });
+        label({ pos: vec(0, 0, len + 0.5), text: "Z", color: color.white });
+        label({ pos: vec(0, 0, -len - 0.5), text: "Z'", color: color.white });
+      }
+
+      function clearScene() {
+        scene.objects.forEach(obj => obj.visible = false);
+        scene.objects.length = 0;
+        drawAxes(10);
+      }
+
+      window.resetScene = function () {
+        clearScene();
+        ["px", "py", "pz"].forEach(id => document.getElementById(id).value = "");
+        document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+        scene.title = "";
+      };
+
+      window.resetView = function () {
+        scene.forward = vec(-1, -1, -1);
+        scene.up = vec(0, 1, 0);
+        scene.center = vec(0, 0, 0);
+        scene.range = 10;
+      };
+
+      function setupEvents() {
+        ["drawVec", "labelP", "labelVec", "angleX", "angleY", "angleZ"].forEach(id =>
+          document.getElementById(id).addEventListener("change", drawScene)
+        );
+      }
+
+      async function draw3DArc(vecA, vecB, radius, colorCode) {
+        const steps = 60;
+        const axis = cross(vecA, vecB).norm();
+        const angle = diff_angle(vecA, vecB);
+        const points = [];
+        for (let i = 0; i <= steps; i++) {
+          const theta = angle * (i / steps);
+          const rot = rotate(vecA.norm().multiply(radius), { angle: theta, axis: axis });
+          points.push(rot);
+        }
+        for (let i = 0; i < points.length - 1; i++) {
+          await new Promise(r => setTimeout(r, 5));
+          curve({ pos: [points[i], points[i + 1]], color: colorCode, radius: 0.03 });
+        }
+        arrow({ pos: points[points.length - 1], axis: axis.cross(points[points.length - 1]).norm().multiply(0.3), color: colorCode, shaftwidth: 0.05 });
+      }
+
+      function drawScene() {
+        clearScene();
+        const x = parseFloat(document.getElementById("px").value);
+        const y = parseFloat(document.getElementById("py").value);
+        const z = parseFloat(document.getElementById("pz").value);
+        const P = vec(x, y, z);
+        const OPmag = P.mag;
+
+        if (document.getElementById("drawVec").checked) {
+          arrow({ pos: vec(0, 0, 0), axis: P, color: color.yellow, shaftwidth: 0.15 });
+        }
+
+        if (document.getElementById("labelP").checked) {
+          sphere({ pos: P, radius: 0.2, color: color.red });
+          label({ pos: P.add(vec(0.4, 0.4, 0.4)), text: `P(${x}, ${y}, ${z})`, height: 14 });
+        }
+
+        if (document.getElementById("labelVec").checked) {
+          const mid = P.multiply(0.5);
+          label({ pos: mid.add(vec(0.4, 0.4, 0.4)), text: `OP = ${x}i + ${y}j + ${z}k`, color: color.yellow, height: 12 });
+        }
+
+        let titleText = "";
+
+        if (document.getElementById("angleX").checked && OPmag !== 0) {
+          const angle = Math.acos(x / OPmag);
+          titleText += `θx = ${(angle * 180 / Math.PI).toFixed(1)}°\n`;
+          draw3DArc(vec(OPmag, 0, 0), P, 2, color.orange);
+        }
+
+        if (document.getElementById("angleY").checked && OPmag !== 0) {
+          const angle = Math.acos(y / OPmag);
+          titleText += `θy = ${(angle * 180 / Math.PI).toFixed(1)}°\n`;
+          draw3DArc(vec(0, OPmag, 0), P, 2.3, color.cyan);
+        }
+
+        if (document.getElementById("angleZ").checked && OPmag !== 0) {
+          const angle = Math.acos(z / OPmag);
+          titleText += `θz = ${(angle * 180 / Math.PI).toFixed(1)}°\n`;
+          draw3DArc(vec(0, 0, OPmag), P, 2.6, color.green);
+        }
+
+        scene.title = titleText;
+      }
+
+      window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+      init();
+    })();
+  </script>
+</body>
+</html>
