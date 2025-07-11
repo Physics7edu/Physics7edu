@@ -11,46 +11,36 @@
   <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background-color: #f4f7fa;
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      color: #222;
       padding: 20px;
-      margin: 0;
     }
     form {
-      background: #ffffff;
-      padding: 15px 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
       margin-bottom: 20px;
       max-width: 1000px;
     }
     label {
       margin-right: 5px;
-      font-weight: 500;
     }
     input[type="number"] {
       width: 60px;
-      margin-right: 10px;
-      padding: 3px;
+      margin-right: 15px;
     }
     button {
-      padding: 6px 14px;
-      border-radius: 6px;
+      padding: 5px 10px;
+      border-radius: 5px;
       background: #007acc;
       color: white;
       border: none;
-      font-weight: bold;
       cursor: pointer;
-      margin-top: 10px;
-      margin-right: 10px;
     }
     button:hover {
       background: #005f99;
-    }
-    .glowscript {
-      border: 2px solid #ccc;
-      border-radius: 10px;
-      margin-bottom: 20px;
     }
   </style>
 </head>
@@ -67,7 +57,7 @@
     <input type="number" id="by" value="5" step="0.1">
     <input type="number" id="bz" value="3" step="0.1"><br><br>
 
-    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
       <label><input type="checkbox" id="showA"> Show Point A</label>
       <label><input type="checkbox" id="showB"> Show Point B</label>
       <label><input type="checkbox" id="drawAB"> Draw AB</label>
@@ -78,8 +68,8 @@
       <label><input type="checkbox" id="showExprUnitAB"> Show Unit AB as xi+yj+zk</label>
     </div><br>
 
-    <button type="button" onclick="resetScene()">Reset</button>
-    <button type="button" onclick="restoreXYView()">Restore XY View</button>
+    <button type="button" id="resetBtn">Reset</button>
+    <button type="button" id="restoreBtn">Reset View to XY</button>
   </form>
 
   <script type="text/javascript">
@@ -89,6 +79,7 @@
 
       function init() {
         scene = canvas({ width: 900, height: 600, background: color.black });
+        resetCamera();
         drawAxes(10);
         setupEvents();
       }
@@ -107,22 +98,25 @@
         label({ pos: vec(0, 0, -len - 0.5), text: "Z'", color: color.blue });
       }
 
-      window.resetScene = function () {
+      function resetScene() {
         scene.objects.forEach(obj => obj.visible = false);
         scene.objects.length = 0;
         objs = {};
         drawAxes(10);
         ["ax", "ay", "az", "bx", "by", "bz"].forEach(id => document.getElementById(id).value = "");
         document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
-      };
+      }
 
-      window.restoreXYView = function () {
+      function resetCamera() {
         scene.camera.pos = vec(0, 0, 20);
         scene.forward = vec(0, 0, -1);
         scene.up = vec(0, 1, 0);
-      };
+        scene.center = vec(0, 0, 0);
+      }
 
       function setupEvents() {
+        document.getElementById("resetBtn").addEventListener("click", resetScene);
+        document.getElementById("restoreBtn").addEventListener("click", resetCamera);
         const ids = ["showA", "showB", "drawAB", "labelMagAB", "drawUnitAB", "labelMagUnitAB", "showExprAB", "showExprUnitAB"];
         ids.forEach(id => document.getElementById(id).addEventListener("change", handleAction));
       }
