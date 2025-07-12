@@ -83,6 +83,7 @@
     <label>Magnitude: <span id="magVal">1</span></label>
     <input type="range" id="magSlider" min="1" max="10" value="1">
 
+    <label><input type="checkbox" id="labelA"> Label Point A</label>
     <label><input type="checkbox" id="labelB"> Label Point B</label>
     <label><input type="checkbox" id="labelXcomp"> X-Component Label</label>
     <label><input type="checkbox" id="labelYcomp"> Y-Component Label</label>
@@ -119,7 +120,7 @@
   }
 
   function setupEvents() {
-    ["ax", "ay", "angleSlider", "magSlider", "labelB", "labelXcomp", "labelYcomp", "labelVec"].forEach(id =>
+    ["ax", "ay", "angleSlider", "magSlider", "labelA", "labelB", "labelXcomp", "labelYcomp", "labelVec"].forEach(id =>
       document.getElementById(id).addEventListener("input", drawScene)
     );
   }
@@ -153,6 +154,11 @@
     label({ pos: A.add(vec(miniLen + 0.3, 0, 0)), text: "X", color: color.orange });
     arrow({ pos: A, axis: vec(0, miniLen, 0), color: color.cyan, shaftwidth: 0.04 });
     label({ pos: A.add(vec(0, miniLen + 0.3, 0)), text: "Y", color: color.cyan });
+
+    if (document.getElementById("labelA").checked) {
+      sphere({ pos: A, radius: 0.2, color: color.green });
+      label({ pos: A.add(vec(-0.4, -0.4, 0)), text: `A(${A.x.toFixed(1)}, ${A.y.toFixed(1)})`, height: 12 });
+    }
 
     arrow({ pos: A, axis: vec(dx, dy, 0), color: color.yellow, shaftwidth: 0.15 });
     if (document.getElementById("labelVec").checked) {
