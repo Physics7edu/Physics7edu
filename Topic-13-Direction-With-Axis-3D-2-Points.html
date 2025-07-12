@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Vector AB with Angles - 3D</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+    }
+    .ui-wrapper {
+      display: flex;
+      flex-direction: row;
+      gap: 20px;
+      padding: 20px;
+    }
+    .form-container {
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      min-width: 280px;
+      height: fit-content;
+    }
+    .form-container input[type="number"] {
+      width: 60px;
+      padding: 5px;
+      margin-right: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    .form-container button {
+      padding: 8px 16px;
+      margin-top: 12px;
+      margin-right: 10px;
+      border-radius: 10px;
+      border: none;
+      background-color: #4CAF50;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .form-container button:hover {
+      background-color: #45a049;
+    }
+    #glowscript {
+      flex-grow: 1;
+    }
+    #glowscript > canvas {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="ui-wrapper">
+    <div class="form-container">
+      <label>A(x, y, z):</label><br>
+      <input type="number" id="ax" value="1" step="0.1">
+      <input type="number" id="ay" value="2" step="0.1">
+      <input type="number" id="az" value="0" step="0.1"><br><br>
+
+      <label>B(x, y, z):</label><br>
+      <input type="number" id="bx" value="4" step="0.1">
+      <input type="number" id="by" value="5" step="0.1">
+      <input type="number" id="bz" value="0" step="0.1"><br>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+        <label><input type="checkbox" id="drawVec"> Draw AB</label>
+        <label><input type="checkbox" id="labelA"> Label Point A</label>
+        <label><input type="checkbox" id="labelB"> Label Point B</label>
+        <label><input type="checkbox" id="labelVec"> Label Vector AB</label>
+        <label><input type="checkbox" id="angleX"> Angle with X-axis</label>
+        <label><input type="checkbox" id="angleY"> Angle with Y-axis</label>
+        <label><input type="checkbox" id="angleZ"> Angle with Z-axis</label>
+      </div>
+
+      <div style="margin-top: 15px;">
+        <button type="button" onclick="resetScene()">Reset</button>
+        <button type="button" onclick="resetView()">Reset View</button>
+      </div>
+    </div>
+
+    <div id="glowscript" class="glowscript"></div>
+  </div>
+
+  <script type="text/javascript">
+    (function () {
+      window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+      let scene;
+
+      function init() {
+        scene = canvas({ width: 800, height: 600, background: color.black });
+        resetView();
+        setupEvents();
+        drawScene();
+      }
+
+      function drawAxes(len = 10) {
+        const dirs = [
+          { d: vec(1, 0, 0), lbl: "X", col: color.white },
+          { d: vec(0, 1, 0), lbl: "Y", col: color.white },
+          { d: vec(0, 0, 1), lbl: "Z", col: color.white },
+          { d: vec(-1, 0, 0), lbl: "X'", col: color.white },
+          { d: vec(0, -1, 0), lbl: "Y'", col: color.white },
+          { d: vec(0, 0, -1), lbl: "Z'", col: color.white }
+        ];
+        dirs.forEach(({ d, lbl, col }) => {
+          arrow({ pos: vec(0, 0, 0), axis: d.multiply(len), color: col, shaftwidth: 0.03 });
+          label({ pos: d.multiply(len + 1), text: lbl, color: col, box: false });
+        });
+      }
+
+      function drawMiniAxes(center, size = 2) {
+        [
+          { d: vec(1, 0, 0), lbl: "x", col: color.red },
+          { d: vec(0, 1, 0), lbl: "y", col: color.green },
+          { d: vec(0, 0, 1), lbl: "z", col: color.blue }
+        ].forEach(({ d, lbl, col }) => {
+          arrow({ pos: center, axis: d.multiply(size), color: col, shaftwidth: 0.04 });
+          label({ pos: center.add(d.multiply(size + 0.5)), text: lbl, box: false, height: 10, color: col });
+        });
+      }
+
+      function clearScene() {
+        scene.objects.forEach(obj => obj.visible = false);
+        scene.objects.length = 0;
+        drawAxes();
+      }
+
+      window.resetScene = function () {
+        clearScene();
+        ["ax", "ay", "az", "bx", "by", "bz"].forEach(id => document.getElementById(id).value = "");
+        document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+        scene.title = "";
+      };
+
+      window.resetView = function () {
+        scene.forward = vec(-1, -1, -1);
+        scene.up = vec(0, 1, 0);
+        scene.center = vec(0, 0, 0);
+        scene.range = 10;
+      };
+
+      function setupEvents() {
+        ["drawVec", "labelA", "labelB", "labelVec", "angleX", "angleY", "angleZ"].forEach(id =>
+          document.getElementById(id).addEventListener("change", drawScene)
+        );
+        ["ax", "ay", "az", "bx", "by", "bz"].forEach(id =>
+          document.getElementById(id).addEventListener("input", drawScene)
+        );
+      }
+
+      function drawArc3D(baseVec, targetVec, radius, colorCode, center) {
+        const steps = 40;
+        const normBase = baseVec.norm();
+        const normTarget = targetVec.norm();
+        const axis = normBase.cross(normTarget).norm();
+        const angle = Math.acos(normBase.dot(normTarget));
+        let arcPoints = [];
+        for (let i = 0; i <= steps; i++) {
+          let th = angle * (i / steps);
+          let p = rotate(normBase.multiply(radius), { axis: axis, angle: th });
+          arcPoints.push(center.add(p));
+        }
+        for (let i = 0; i < arcPoints.length - 1; i++) {
+          curve({ pos: [arcPoints[i], arcPoints[i + 1]], radius: 0.02, color: colorCode });
+        }
+        let endPoint = arcPoints[arcPoints.length - 1];
+        let tangent = arcPoints[arcPoints.length - 1].sub(arcPoints[arcPoints.length - 2]).norm();
+        arrow({ pos: endPoint, axis: tangent.multiply(0.3), color: colorCode, shaftwidth: 0.04 });
+      }
+
+      function drawScene() {
+        clearScene();
+        scene.title = "";
+
+        const ax = parseFloat(document.getElementById("ax").value);
+        const ay = parseFloat(document.getElementById("ay").value);
+        const az = parseFloat(document.getElementById("az").value);
+        const bx = parseFloat(document.getElementById("bx").value);
+        const by = parseFloat(document.getElementById("by").value);
+        const bz = parseFloat(document.getElementById("bz").value);
+
+        const A = vec(ax, ay, az);
+        const B = vec(bx, by, bz);
+        const AB = B.sub(A);
+        const ABmag = AB.mag;
+
+        drawMiniAxes(A, 2);
+
+        if (document.getElementById("drawVec").checked) {
+          arrow({ pos: A, axis: AB, color: color.yellow, shaftwidth: 0.15 });
+        }
+
+        if (document.getElementById("labelA").checked) {
+          sphere({ pos: A, radius: 0.2, color: color.red });
+          label({ pos: A.add(vec(-0.5, -0.5, 0.5)), text: `A(${ax}, ${ay}, ${az})`, height: 12 });
+        }
+
+        if (document.getElementById("labelB").checked) {
+          sphere({ pos: B, radius: 0.2, color: color.red });
+          label({ pos: B.add(vec(0.5, 0.5, 0.5)), text: `B(${bx}, ${by}, ${bz})`, height: 12 });
+        }
+
+        if (document.getElementById("labelVec").checked) {
+          const mid = A.add(AB.multiply(0.5));
+          label({
+            pos: mid.add(vec(0.4, 0.4, 0.4)),
+            text: `AB = ${AB.x.toFixed(1)}i + ${AB.y.toFixed(1)}j + ${AB.z.toFixed(1)}k`,
+            color: color.yellow,
+            height: 12
+          });
+        }
+
+        let titleText = "";
+        if (ABmag > 0) {
+          if (document.getElementById("angleX").checked) {
+            const thetaX = Math.acos(AB.x / ABmag) * 180 / Math.PI;
+            drawArc3D(vec(1, 0, 0), AB, 1.5, color.orange, A);
+            titleText += `θx = ${thetaX.toFixed(1)}°\n`;
+          }
+          if (document.getElementById("angleY").checked) {
+            const thetaY = Math.acos(AB.y / ABmag) * 180 / Math.PI;
+            drawArc3D(vec(0, 1, 0), AB, 1.8, color.cyan, A);
+            titleText += `θy = ${thetaY.toFixed(1)}°\n`;
+          }
+          if (document.getElementById("angleZ").checked) {
+            const thetaZ = Math.acos(AB.z / ABmag) * 180 / Math.PI;
+            drawArc3D(vec(0, 0, 1), AB, 2.1, color.green, A);
+            titleText += `θz = ${thetaZ.toFixed(1)}°\n`;
+          }
+        }
+
+        scene.title = titleText;
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
