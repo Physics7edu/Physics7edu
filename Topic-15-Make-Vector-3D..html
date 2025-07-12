@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>3D Vector with Sliders</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+    .ui-wrapper { display: flex; gap: 20px; padding: 20px; }
+    .form-container {
+      background-color: #ffffff; padding: 20px; border-radius: 15px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); min-width: 300px;
+    }
+    .form-container input[type="number"] { width: 60px; padding: 5px; margin-right: 5px; border-radius: 5px; border: 1px solid #ccc; }
+    .form-container label,
+    .form-container input,
+    .form-container button { display: block; margin-bottom: 10px; }
+    .form-container button {
+      padding: 8px 16px; border-radius: 10px; border: none;
+      background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer;
+    }
+    .form-container button:hover { background-color: #45a049; }
+    #glowscript { flex-grow: 1; }
+    #glowscript > canvas {
+      border: 1px solid #ccc; border-radius: 10px;
+    }
+    .value-table { margin-top: 15px; width: 100%; border-collapse: collapse; }
+    .value-table th, .value-table td {
+      border: 1px solid #ccc; padding: 5px; text-align: center;
+    }
+    #gammaVal.invalid { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+<div class="ui-wrapper">
+  <div class="form-container">
+    <label>Origin A(x, y, z):</label>
+    <input type="number" id="ax" value="0" step="0.1">
+    <input type="number" id="ay" value="0" step="0.1">
+    <input type="number" id="az" value="0" step="0.1">
+
+    <label>Magnitude: <span id="magVal">5</span></label>
+    <input type="range" id="magSlider" min="1" max="10" step="0.1" value="5">
+
+    <label>Alpha (°) with X-axis: <span id="alphaVal">45</span></label>
+    <input type="range" id="alphaSlider" min="-180" max="180" value="45">
+
+    <label>Beta (°) with Y-axis: <span id="betaVal">60</span></label>
+    <input type="range" id="betaSlider" min="-180" max="180" value="60">
+
+    <div><b>Gamma (computed):</b> <span id="gammaVal">0.00°</span></div>
+
+    <label><input type="checkbox" id="labelA"> Label Point A</label>
+    <label><input type="checkbox" id="labelB"> Label Point B</label>
+    <label><input type="checkbox" id="labelXcomp"> X-Component Label</label>
+    <label><input type="checkbox" id="labelYcomp"> Y-Component Label</label>
+    <label><input type="checkbox" id="labelZcomp"> Z-Component Label</label>
+    <label><input type="checkbox" id="labelVec"> Vector Label</label>
+
+    <button onclick="resetCameraView()">Reset View</button>
+
+    <table class="value-table">
+      <thead><tr><th>X</th><th>Y</th><th>Z</th></tr></thead>
+      <tbody><tr><td id="xComp">0</td><td id="yComp">0</td><td id="zComp">0</td></tr></tbody>
+    </table>
+  </div>
+  <div id="glowscript" class="glowscript"></div>
+</div>
+
+<script type="text/javascript">
+(function () {
+  let scene;
+
+  window.resetCameraView = function () {
+    if (!scene) return;
+    scene.forward = vec(-1, -1, -1);
+    scene.up = vec(0, 1, 0);
+    scene.center = vec(0, 0, 0);
+    scene.range = 10;
+  };
+
+  function drawGlobalAxes() {
+    const L = 8;
+    const C = color.white;
+    const axes = [
+      { axis: vec( L, 0, 0), label: "X",  pos: vec( L+0.3, 0, 0) },
+      { axis: vec(-L, 0, 0), label: "X′", pos: vec(-L-0.6, 0, 0) },
+      { axis: vec(0,  L, 0), label: "Y",  pos: vec(0, L+0.3, 0) },
+      { axis: vec(0, -L, 0), label: "Y′", pos: vec(0, -L-0.6, 0) },
+      { axis: vec(0, 0,  L), label: "Z",  pos: vec(0, 0, L+0.3) },
+      { axis: vec(0, 0, -L), label: "Z′", pos: vec(0, 0, -L-0.6) }
+    ];
+    for (const { axis, label: lbl, pos } of axes) {
+      arrow({ pos: vec(0, 0, 0), axis, color: C, shaftwidth: 0.04 });
+      label({ pos, text: lbl, color: C, box: false });
+    }
+  }
+
+  function init() {
+    window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+    scene = canvas({ width: 800, height: 600, background: color.black });
+    resetCameraView();
+    setupEvents();
+    drawScene();
+  }
+
+  function setupEvents() {
+    ["ax", "ay", "az", "magSlider", "alphaSlider", "betaSlider", "labelA", "labelB", "labelXcomp", "labelYcomp", "labelZcomp", "labelVec"]
+      .forEach(id => document.getElementById(id).addEventListener("input", drawScene));
+  }
+
+  function drawSmartPlanes(A, dx, dy, dz) {
+    const size = 1.05;
+    const xzSize = vec(Math.abs(dx), 0.01, Math.abs(dz));
+    const yzSize = vec(0.01, Math.abs(dy), Math.abs(dz));
+    const xySize = vec(Math.abs(dx), Math.abs(dy), 0.01);
+    box({ pos: A.add(vec(dx, 0, dz).multiply(0.5)), size: xzSize, color: color.white, opacity: 0.2 });
+    box({ pos: A.add(vec(0, dy, dz).multiply(0.5)), size: yzSize, color: color.white, opacity: 0.2 });
+    box({ pos: A.add(vec(dx, dy, 0).multiply(0.5)), size: xySize, color: color.white, opacity: 0.2 });
+  }
+
+  function drawMiniatureAxes(A, axisLength = 2.5) {
+    const dirs = [vec(axisLength, 0, 0), vec(0, axisLength, 0), vec(0, 0, axisLength)];
+    const labels = ["X", "Y", "Z"];
+    const colors = [color.red, color.green, color.blue];
+    for (let i = 0; i < 3; i++) {
+      arrow({ pos: A, axis: dirs[i], color: colors[i], shaftwidth: 0.03 });
+      label({ pos: A.add(dirs[i]).add(vec(0.2, 0.2, 0)), text: labels[i], color: colors[i], box: false });
+    }
+  }
+
+  function drawScene() {
+    scene.objects.forEach(obj => obj.visible = false);
+    scene.objects.length = 0;
+
+    drawGlobalAxes();
+
+    const ax = parseFloat(document.getElementById("ax").value);
+    const ay = parseFloat(document.getElementById("ay").value);
+    const az = parseFloat(document.getElementById("az").value);
+    const mag = parseFloat(document.getElementById("magSlider").value);
+    const alphaDeg = parseFloat(document.getElementById("alphaSlider").value);
+    const betaDeg = parseFloat(document.getElementById("betaSlider").value);
+
+    document.getElementById("magVal").textContent = mag;
+    document.getElementById("alphaVal").textContent = alphaDeg;
+    document.getElementById("betaVal").textContent = betaDeg;
+
+    const lx = Math.cos(alphaDeg * Math.PI / 180);
+    const ly = Math.cos(betaDeg * Math.PI / 180);
+    const delta = 1 - lx * lx - ly * ly;
+    const gammaVal = document.getElementById("gammaVal");
+
+    if (delta < 0) {
+      gammaVal.textContent = "Invalid α and β";
+      gammaVal.classList.add("invalid");
+      return;
+    } else {
+      gammaVal.classList.remove("invalid");
+    }
+
+    const lz = Math.sqrt(delta);
+    const gammaDeg = Math.acos(lz) * 180 / Math.PI;
+    gammaVal.textContent = gammaDeg.toFixed(2) + "°";
+
+    const dx = mag * lx;
+    const dy = mag * ly;
+    const dz = mag * lz;
+
+    const A = vec(ax, ay, az);
+    const B = A.add(vec(dx, dy, dz));
+
+    drawMiniatureAxes(A);
+    drawSmartPlanes(A, dx, dy, dz);
+
+    arrow({ pos: A, axis: vec(dx, dy, dz), color: color.yellow, shaftwidth: 0.15 });
+    if (document.getElementById("labelVec").checked) {
+      label({ pos: A.add(vec(dx / 2, dy / 2, dz / 2)), text: `${dx.toFixed(2)}i + ${dy.toFixed(2)}j + ${dz.toFixed(2)}k`, color: color.yellow });
+    }
+
+    if (document.getElementById("labelA").checked) {
+      sphere({ pos: A, radius: 0.2, color: color.green });
+      label({ pos: A.add(vec(-0.4, -0.4, 0)), text: `A(${ax},${ay},${az})`, height: 12 });
+    }
+    if (document.getElementById("labelB").checked) {
+      sphere({ pos: B, radius: 0.2, color: color.red });
+      label({ pos: B.add(vec(0.4, 0.4, 0)), text: `B(${B.x.toFixed(2)},${B.y.toFixed(2)},${B.z.toFixed(2)})` });
+    }
+
+    [[vec(dx, 0, 0), color.red, "X", "xComp"], [vec(0, dy, 0), color.green, "Y", "yComp"], [vec(0, 0, dz), color.blue, "Z", "zComp"]].forEach(([compVec, col, axis, tdID]) => {
+      const end = A.add(vec(dx, dy, dz));
+      const perpVec = end.sub(A).proj(compVec.norm()).multiply(-1);
+      arrow({ pos: end, axis: perpVec, color: col, shaftwidth: 0.02 });
+      if (document.getElementById(`label${axis}comp`).checked) {
+        const mid = end.add(perpVec.multiply(0.5));
+        label({ pos: mid, text: `${axis}: ${compVec.mag.toFixed(2)}`, color: col });
+      }
+      document.getElementById(tdID).textContent = compVec.mag.toFixed(2);
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
