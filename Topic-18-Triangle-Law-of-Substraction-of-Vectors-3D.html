@@ -24,6 +24,13 @@
       color: white; border: none; border-radius: 6px; cursor: pointer;
     }
     .form-container button:hover { background: #45a049; }
+    .canvas-container {
+      flex-grow: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
     #glowscript canvas {
       border: 1px solid #ccc; border-radius: 12px;
     }
@@ -53,7 +60,9 @@
       </div>
       <button id="resetBtn">Reset</button>
     </div>
-    <div id="glowscript" class="glowscript"></div>
+    <div class="canvas-container">
+      <div id="glowscript" class="glowscript"></div>
+    </div>
   </div>
   <script type="text/javascript">
     (function () {
@@ -131,11 +140,11 @@
           let CDneg = CDvec.multiply(-1);
           let Dpp = Cp.add(CDneg);
           arrow({ pos: Cp, axis: Dpp.sub(Cp), color: color.purple, shaftwidth: 0.12 });
+          drawLabel(Dpp, `D″(${Dpp.x.toFixed(1)}, ${Dpp.y.toFixed(1)}, ${Dpp.z.toFixed(1)})`, color.white);
           if (labelCDpp.checked) {
             let midCDpp = Cp.add(Dpp).multiply(0.5);
             let vecCDpp = Dpp.sub(Cp);
             drawLabel(midCDpp, `${vecCDpp.x.toFixed(1)}i + ${vecCDpp.y.toFixed(1)}j + ${vecCDpp.z.toFixed(1)}k`, color.purple);
-            drawLabel(Dpp, `D″(${Dpp.x.toFixed(1)}, ${Dpp.y.toFixed(1)}, ${Dpp.z.toFixed(1)})`, color.white);
           }
           drawVector(A, Dpp, color.orange, "drawADp", "labelADp", true, 'A', 'D″', 0.12);
         }
