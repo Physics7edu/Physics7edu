@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; }
+    form {
+      background: white; padding: 15px; border-radius: 10px;
+      margin: 20px auto; max-width: 1200px; box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label { font-size: 14px; }
+    input[type=number] { width: 50px; margin-right: 10px; }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px; margin-top: 15px;
+    }
+    button {
+      margin-top: 15px; padding: 10px 20px;
+      background-color: #4CAF50; color: white;
+      border: none; border-radius: 5px; cursor: pointer;
+    }
+    button:hover { background-color: #45a049; }
+    #glowscript canvas {
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #ccc; border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<form>
+  <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <label>A(x₁, y₁): <input type="number" id="x1" value="2"> <input type="number" id="y1" value="3"></label>
+    <label>B(x₂, y₂): <input type="number" id="x2" value="6"> <input type="number" id="y2" value="3"></label>
+    <label>C(x₃, y₃): <input type="number" id="x3" value="1"> <input type="number" id="y3" value="1"></label>
+    <label>D(x₄, y₄): <input type="number" id="x4" value="3"> <input type="number" id="y4" value="1"></label>
+  </div>
+
+  <div class="checkbox-grid">
+    <label><input type="checkbox" class="ctrl" id="drawAB"> Draw AB</label>
+    <label><input type="checkbox" class="ctrl" id="drawCD"> Draw CD</label>
+    <label><input type="checkbox" class="ctrl" id="convertCD"> Convert CD to DC</label>
+    <label><input type="checkbox" class="ctrl" id="dispC"> C → C′</label>
+    <label><input type="checkbox" class="ctrl" id="dispD"> D → D′</label>
+    <label><input type="checkbox" class="ctrl" id="translateCD"> Translate DC → D′C′</label>
+    <label><input type="checkbox" class="ctrl" id="drawCE"> Draw C′E</label>
+    <label><input type="checkbox" class="ctrl" id="drawBE"> Draw BE</label>
+    <label><input type="checkbox" class="ctrl" id="drawAE"> Draw AE</label>
+    <label><input type="checkbox" class="ctrl" id="labelCp"> Label C′</label>
+    <label><input type="checkbox" class="ctrl" id="labelE"> Label E</label>
+    <label><input type="checkbox" class="ctrl" id="labelAB"> Label AB</label>
+    <label><input type="checkbox" class="ctrl" id="labelCD"> Label CD</label>
+    <label><input type="checkbox" class="ctrl" id="labelCDp"> Label DC</label>
+    <label><input type="checkbox" class="ctrl" id="labelCE"> Label C′E</label>
+    <label><input type="checkbox" class="ctrl" id="labelBE"> Label BE</label>
+    <label><input type="checkbox" class="ctrl" id="labelAE"> Label AE</label>
+    <label><input type="checkbox" class="ctrl" id="labelCCp"> Label CC′</label>
+    <label><input type="checkbox" class="ctrl" id="labelDDp"> Label DD′</label>
+    <label><input type="checkbox" class="ctrl" id="labelACp"> Label AC′</label>
+  </div>
+
+  <button type="button" id="resetBtn">Reset</button>
+</form>
+
+<div id="glowscript" class="glowscript"></div>
+
+<script type="text/javascript">
+(function () {
+  let scene;
+
+  function drawLabel(pos, text, colorVal) {
+    label({ pos: pos.add(vec(0.2, 0.2, 0)), text: text, color: colorVal, box: true, background: color.black });
+  }
+
+  function drawVector(from, to, colorVal, drawId, labelId, overrideColor=null) {
+    if (!document.getElementById(drawId).checked) return;
+    arrow({ pos: from, axis: to.sub(from), color: colorVal, shaftwidth: 0.1 });
+    if (document.getElementById(labelId).checked) {
+      let mid = from.add(to).multiply(0.5);
+      let v = to.sub(from);
+      drawLabel(mid, `${v.x.toFixed(1)}i + ${v.y.toFixed(1)}j`, overrideColor || colorVal);
+    }
+  }
+
+  function drawAll() {
+    scene.objects.forEach(o => o.visible = false);
+    scene.objects.length = 0;
+
+    let A = vec(+x1.value, +y1.value, 0);
+    let B = vec(+x2.value, +y2.value, 0);
+    let C = vec(+x3.value, +y3.value, 0);
+    let D = vec(+x4.value, +y4.value, 0);
+
+    if (drawAB.checked) {
+      arrow({ pos: A, axis: B.sub(A), color: color.yellow, shaftwidth: 0.1 });
+      drawLabel(A, `A(${A.x}, ${A.y})`, color.white);
+      drawLabel(B, `B(${B.x}, ${B.y})`, color.white);
+      if (labelAB.checked) {
+        let midAB = A.add(B).multiply(0.5);
+        let vAB = B.sub(A);
+        drawLabel(midAB, `${vAB.x.toFixed(1)}i + ${vAB.y.toFixed(1)}j`, color.yellow);
+      }
+    }
+
+    if (drawCD.checked) {
+      let start = convertCD.checked ? D : C;
+      let end = convertCD.checked ? C : D;
+      arrow({ pos: start, axis: end.sub(start), color: color.cyan, shaftwidth: 0.1 });
+      drawLabel(C, `C(${C.x}, ${C.y})`, color.white);
+      drawLabel(D, `D(${D.x}, ${D.y})`, color.white);
+      if (convertCD.checked && labelCDp.checked) {
+        let mid = start.add(end).multiply(0.5);
+        let v = end.sub(start);
+        drawLabel(mid, `${v.x.toFixed(1)}i + ${v.y.toFixed(1)}j`, color.cyan);
+      }
+      if (!convertCD.checked && labelCD.checked) {
+        let mid = start.add(end).multiply(0.5);
+        let v = end.sub(start);
+        drawLabel(mid, `${v.x.toFixed(1)}i + ${v.y.toFixed(1)}j`, color.cyan);
+      }
+    }
+
+    let DA = A.sub(D);
+    let Cp = C.add(DA);
+    let Dp = A;
+
+    if (dispC.checked) {
+      arrow({ pos: C, axis: DA, color: color.red, shaftwidth: 0.05 });
+      if (labelCCp.checked) drawLabel(C.add(DA.multiply(0.5)), `${DA.x.toFixed(1)}i + ${DA.y.toFixed(1)}j`, color.red);
+    }
+
+    if (dispD.checked) {
+      arrow({ pos: D, axis: DA, color: color.red, shaftwidth: 0.05 });
+      if (labelDDp.checked) drawLabel(D.add(DA.multiply(0.5)), `${DA.x.toFixed(1)}i + ${DA.y.toFixed(1)}j`, color.red);
+    }
+
+    if (translateCD.checked) {
+      arrow({ pos: Dp, axis: Cp.sub(Dp), color: color.green, shaftwidth: 0.1 });
+      if (labelCp.checked) drawLabel(Cp, `C′(${Cp.x.toFixed(1)}, ${Cp.y.toFixed(1)})`, color.white);
+
+      let E = Cp.add(B.sub(A));
+      if (labelE.checked) drawLabel(E, `E(${E.x.toFixed(1)}, ${E.y.toFixed(1)})`, color.white);
+
+      drawVector(Cp, E, color.white, "drawCE", "labelCE", color.yellow);
+      drawVector(B, E, color.orange, "drawBE", "labelBE");
+      drawVector(A, E, color.cyan, "drawAE", "labelAE");
+
+      if (labelACp.checked) {
+        let v = Cp.sub(A);
+        let mid = A.add(Cp).multiply(0.5);
+        drawLabel(mid, `${v.x.toFixed(1)}i + ${v.y.toFixed(1)}j`, color.magenta);
+      }
+    }
+  }
+
+  function setup() {
+    scene = canvas({ width: 900, height: 600, background: color.black });
+    drawAll();
+    document.querySelectorAll(".ctrl, input[type=number]").forEach(el =>
+      el.addEventListener("change", drawAll)
+    );
+    resetBtn.addEventListener("click", () => {
+      document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+      drawAll();
+    });
+  }
+
+  window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+  setup();
+})();
+</script>
+
+</body>
+</html>
