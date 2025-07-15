@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #1f2937;
+      color: #f3f4f6;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+    }
+    #glowscript {
+      flex: 1;
+      margin-left: 20rem;
+    }
+    #vectorExpr {
+      position: absolute;
+      top: 1rem;
+      right: 1.5rem;
+      background: rgba(17, 24, 39, 0.95);
+      color: #f3f4f6;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: opacity 0.3s ease;
+    }
+    form {
+      position: fixed;
+      left: 1rem;
+      top: 1rem;
+      width: 18rem;
+      background: #111827;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    input[type="number"], input[type="range"] {
+      background: #374151;
+      color: #f3f4f6;
+      border: 1px solid #4b5563;
+      border-radius: 0.25rem;
+      padding: 0.25rem;
+      transition: all 0.2s ease;
+    }
+    input[type="number"] {
+      width: 4rem;
+    }
+    input[type="range"] {
+      width: 8rem;
+    }
+    input[type="number"]:focus, input[type="range"]:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+    button {
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #4f46e5;
+    }
+    label {
+      color: #d1d5db;
+    }
+    input[type="checkbox"] {
+      accent-color: #6366f1;
+    }
+    .toggles {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="vectorExpr">V = 0.00 i + 0.00 j</div>
+  <div id="glowscript" class="glowscript"></div>
+
+  <form>
+    <div class="grid grid-cols-1 gap-4">
+      <div class="flex items-center space-x-4">
+        <label class="w-20">Magnitude:</label>
+        <input type="number" id="mag" value="5" min="0" max="10" step="0.1">
+        <input type="range" id="sliderMag" min="0" max="10" step="0.1" value="5">
+      </div>
+      <div class="flex items-center space-x-4">
+        <label class="w-20">Angle θ (°):</label>
+        <input type="number" id="theta" value="0" min="-180" max="180" step="1">
+        <input type="range" id="sliderTheta" min="-180" max="180" step="1" value="0">
+      </div>
+      <div class="toggles">
+        <label class="flex items-center space-x-2">
+          <input type="checkbox" id="showVec" checked> <span>Vector OP</span>
+        </label>
+        <label class="flex items-center space-x-2">
+          <input type="checkbox" id="showComps" checked> <span>Components</span>
+        </label>
+        <label class="flex items-center space-x-2">
+          <input type="checkbox" id="showArcX" checked> <span>∠(OP,X)</span>
+        </label>
+        <label class="flex items-center space-x-2">
+          <input type="checkbox" id="showArcY" checked> <span>∠(OP,Y)</span>
+        </label>
+      </div>
+      <button type="button" onclick="resetScene()" class="mt-4">Reset</button>
+    </div>
+  </form>
+
+  <script type="text/javascript">
+  (function(){
+    let scene;
+
+    function signedAngle(u, v) {
+      const a1 = Math.atan2(u.y, u.x), a2 = Math.atan2(v.y, v.x);
+      let d = a2 - a1;
+      if (d >  Math.PI) d -= 2*Math.PI;
+      if (d <= -Math.PI) d += 2*Math.PI;
+      return d;
+    }
+
+    function drawAxes(){
+      const L=8, C=color.white, off=0.5;
+      arrow({pos:vec(-L,0,0), axis:vec(2*L,0,0), color:C, shaftwidth:0.03});
+      arrow({pos:vec(0,-L,0), axis:vec(0,2*L,0), color:C, shaftwidth:0.03});
+      label({pos:vec(L+off,0,0), text:"X",  color:C, box:false, height:12});
+      label({pos:vec(-L-1.2,0,0), text:"X′",color:C, box:false, height:12});
+      label({pos:vec(0,L+off,0), text:"Y",  color:C, box:false, height:12});
+      label({pos:vec(0,-L-1.2,0),text:"Y′",color:C, box:false, height:12});
+    }
+
+    function drawAngleArc(startV, endV, col, rad, txt){
+      const ang = signedAngle(startV, endV), pts=[];
+      const steps=40;
+      for(let i=0;i<=steps;i++){
+        const t=ang*i/steps;
+        pts.push(startV.rotate({angle:t,axis:vec(0,0,1)}).norm().multiply(rad));
+      }
+      curve({pos:pts, radius:0.03, color:col});
+      const mid=pts[Math.floor(steps/2)];
+      label({pos:mid.add(vec(0.2,0.2,0)), text:txt, color:col, box:false, height:12});
+    }
+
+    function updateVectorExpr(vx, vy) {
+      const signY = vy<0 ? " − " : " + ";
+      const absY  = Math.abs(vy).toFixed(2);
+      $("#vectorExpr").text(
+        `V = ${vx.toFixed(2)} i${signY}${absY} j`
+      );
+    }
+
+    function drawScene(){
+      scene.objects.forEach(o=>o.visible=false);
+      scene.objects.length=0;
+
+      drawAxes();
+
+      const mag   = parseFloat($("#mag").val());
+      const θdeg  = parseFloat($("#theta").val());
+      const θ     = θdeg*Math.PI/180;
+      const vx    = mag*Math.cos(θ), vy=mag*Math.sin(θ);
+      const v     = vec(vx, vy, 0);
+      const uX    = vec(1,0,0), uY=vec(0,1,0);
+
+      updateVectorExpr(vx, vy);
+
+      const showV   = $("#showVec").prop("checked");
+      const showC   = $("#showComps").prop("checked");
+      const showX   = $("#showArcX").prop("checked");
+      const showY   = $("#showArcY").prop("checked");
+
+      if (showV) {
+        arrow({pos:vec(0,0,0),axis:v, color:color.magenta, shaftwidth:0.15});
+        sphere({pos:v, radius:0.15, color:color.red});
+        label({pos:v.add(vec(0.3,0.3,0)), text:`P(${vx.toFixed(2)},${vy.toFixed(2)},0)`, color:color.white, box:false, height:12});
+      }
+      if (showC) {
+        arrow({pos:vec(0,0,0),axis:vec(vx,0,0), color:color.red, shaftwidth:0.12});
+        arrow({pos:vec(0,0,0),axis:vec(0,vy,0), color:color.green, shaftwidth:0.12});
+        label({pos:vec(vx/2+0.3,0.3,0), text:`${vx.toFixed(2)}`, color:color.red, box:false, height:12});
+        label({pos:vec(0.3,vy/2+0.3,0), text:`${vy.toFixed(2)}`, color:color.green, box:false, height:12});
+      }
+      if (showX) {
+        drawAngleArc(uX, v, color.orange, 1.5, `∠ = ${θdeg.toFixed(1)}°`);
+      }
+      if (showY) {
+        const angY = signedAngle(uY, v)*180/Math.PI;
+        drawAngleArc(uY, v, color.cyan, 1.2, `∠ = ${angY.toFixed(1)}°`);
+      }
+    }
+
+    function setup(){
+      scene = canvas({width:800, height:600, background:color.black, center:vec(0,0,0), forward:vec(0,0,-1)});
+      [["mag","sliderMag"],["theta","sliderTheta"]].forEach(([n,s])=>{
+        $("#"+n).on("input", ()=>{$("#"+s).val($("#"+n).val()); drawScene();});
+        $("#"+s).on("input", ()=>{$("#"+n).val($("#"+s).val()); drawScene();});
+      });
+      ["showVec","showComps","showArcX","showArcY"].forEach(id=>{
+        $("#"+id).on("change", drawScene);
+      });
+      drawScene();
+    }
+
+    window.resetScene = ()=>{
+      $("#mag, #sliderMag").val(5);
+      $("#theta, #sliderTheta").val(0);
+      ["showVec","showComps","showArcX","showArcY"].forEach(id=>{
+        $("#"+id).prop("checked", true);
+      });
+      drawScene();
+    };
+
+    window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+    window.onload = setup;
+  })();
+  </script>
+</body>
+</html>

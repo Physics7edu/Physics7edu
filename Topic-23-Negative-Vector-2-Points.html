@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>2‑Point AB Vector Visualizer</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; height: 100vh; background: #f0f0f0; font-family: sans-serif; }
+    #controls { width: 340px; padding: 20px; background: #fff; box-shadow: 2px 0 8px rgba(0,0,0,0.1); overflow-y: auto; }
+    #glowscript { flex-grow: 1; background: black; }
+    h2 { margin-top: 0; font-size: 18px; }
+    .inputs label { display: inline-block; width: 80px; }
+    .inputs input { width: 60px; margin-right: 10px; }
+    .checkboxes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .checkboxes label { width: 48%; }
+    button { width: 100%; padding: 8px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #45a049; }
+    table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 14px; }
+    th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <div id="controls">
+    <h2>Points A and B</h2>
+    <div class="inputs">
+      <label>A(x,y,z):</label>
+      <input type="number" id="Ax" step="0.1" placeholder="Ax">
+      <input type="number" id="Ay" step="0.1" placeholder="Ay">
+      <input type="number" id="Az" step="0.1" placeholder="Az">
+    </div>
+    <div class="inputs">
+      <label>B(x,y,z):</label>
+      <input type="number" id="Bx" step="0.1" placeholder="Bx">
+      <input type="number" id="By" step="0.1" placeholder="By">
+      <input type="number" id="Bz" step="0.1" placeholder="Bz">
+    </div>
+
+    <h2>Options</h2>
+    <div class="checkboxes">
+      <label><input type="checkbox" id="drawAB" checked> Draw AB</label>
+      <label><input type="checkbox" id="drawBA"> Draw BA</label>
+      <label><input type="checkbox" id="showMag"> Show Magnitudes</label>
+      <label><input type="checkbox" id="angleX"> Angle at A/B with X</label>
+      <label><input type="checkbox" id="angleY"> Angle at A/B with Y</label>
+      <label><input type="checkbox" id="angleZ"> Angle at A/B with Z</label>
+    </div>
+
+    <button id="resetBtn">Reset</button>
+
+    <table>
+      <thead>
+        <tr><th>Vector</th><th>θₓ</th><th>θᵧ</th><th>θ𝓏</th></tr>
+      </thead>
+      <tbody>
+        <tr id="rowAB"><td>AB</td><td>–</td><td>–</td><td>–</td></tr>
+        <tr id="rowBA"><td>BA</td><td>–</td><td>–</td><td>–</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="glowscript" class="glowscript"></div>
+
+  <script type="text/javascript">
+  (function(){
+    let scene;
+    function init(){
+      window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+      scene = canvas({ width:800, height:600, background: color.black });
+      $("input").on("input change", drawAll);
+      $("#resetBtn").click(resetAll);
+      drawAll();
+    }
+
+    function miniAxes(P, len){
+      const dirs = [vec(1,0,0), vec(0,1,0), vec(0,0,1)];
+      const cols = [color.red, color.green, color.blue];
+      ["x̂","ŷ","ẑ"].forEach((lbl,i)=>{
+        arrow({ pos:P, axis:dirs[i].multiply(len), color:cols[i], shaftwidth:0.04 });
+        label({ pos:P.add(dirs[i].multiply(len+0.2)), text:lbl, color:cols[i], height:12 });
+      });
+    }
+
+    function animateArcAt(P, axis, vecDir, radius, col){
+      const θ = axis.diff_angle(vecDir);
+      if(!θ || θ===Math.PI) return;
+      const rotA = axis.cross(vecDir).norm();
+      const curveObj = curve({ color:col, radius:0.03, pos:[] });
+      let pts = [], i=0;
+      const steps = 60, iv = setInterval(()=>{
+        if(i>steps){
+          clearInterval(iv);
+          const mid = pts[Math.floor(steps/2)];
+          label({ pos:mid.add(vec(0.1,0.1,0)),
+                  text:(θ*180/Math.PI).toFixed(1)+'°',
+                  color:col, height:12, box:false });
+          return;
+        }
+        const t = θ*i/steps;
+        const p = rotate(axis.norm(),{angle:t,axis:rotA}).multiply(radius).add(P);
+        pts.push(p);
+        curveObj.append({ pos:p });
+        i++;
+      },16);
+    }
+
+    function updateRow(id, v){
+      const row = $("#"+id);
+      if(!v || v.mag===0){
+        row.find("td").slice(1).text("–");
+      } else {
+        row.find("td").eq(1).text((Math.acos(v.x/v.mag)*180/Math.PI).toFixed(1)+'°');
+        row.find("td").eq(2).text((Math.acos(v.y/v.mag)*180/Math.PI).toFixed(1)+'°');
+        row.find("td").eq(3).text((Math.acos(v.z/v.mag)*180/Math.PI).toFixed(1)+'°');
+      }
+    }
+
+    function drawAll(){
+      scene.objects.forEach(o=>o.visible=false);
+      scene.objects.length = 0;
+
+      const Ax = +$("#Ax").val()||0, Ay = +$("#Ay").val()||0, Az = +$("#Az").val()||0;
+      const Bx = +$("#Bx").val()||0, By = +$("#By").val()||0, Bz = +$("#Bz").val()||0;
+      const A = vec(Ax,Ay,Az), B = vec(Bx,By,Bz);
+      const AB = B.sub(A), BA = A.sub(B);
+      const dAB = $("#drawAB").prop("checked"), dBA = $("#drawBA").prop("checked");
+      const sM  = $("#showMag").prop("checked");
+      const aX  = $("#angleX").prop("checked"), aY = $("#angleY").prop("checked"), aZ = $("#angleZ").prop("checked");
+      const magAB = AB.mag, magBA = BA.mag;
+
+      // global axes
+      [["X",vec(1,0,0)],["Y",vec(0,1,0)],["Z",vec(0,0,1)]].forEach(([L,dir])=>{
+        arrow({ pos:vec(0,0,0), axis:dir.multiply(1.5*Math.max(magAB,magBA,1)), color:color.white, shaftwidth:0.05 });
+        label({ pos:dir.multiply(1.5*Math.max(magAB,magBA,1)+0.3), text:L, color:color.white, height:12 });
+        arrow({ pos:vec(0,0,0), axis:dir.multiply(-1.5*Math.max(magAB,magBA,1)), color:color.white, shaftwidth:0.05 });
+        label({ pos:dir.multiply(-1.5*Math.max(magAB,magBA,1)-0.3), text:L+"'", color:color.white, height:12 });
+      });
+
+      // Draw vectors
+      if(dAB){
+        arrow({ pos:A, axis:AB, color:color.yellow, shaftwidth:0.2 });
+        label({ pos:A.add(AB.multiply(0.5)).add(vec(0.2,0.2,0)),
+               text:`${AB.x.toFixed(1)}i+${AB.y.toFixed(1)}j+${AB.z.toFixed(1)}k`,
+               color:color.yellow, box:true, height:12 });
+      }
+      if(dBA){
+        arrow({ pos:B, axis:BA, color:color.magenta, shaftwidth:0.2 });
+        label({ pos:B.add(BA.multiply(0.5)).add(vec(-0.2,-0.2,0)),
+               text:`${BA.x.toFixed(1)}i+${BA.y.toFixed(1)}j+${BA.z.toFixed(1)}k`,
+               color:color.magenta, box:true, height:12 });
+      }
+
+      // Magnitudes
+      if(sM){
+        if(dAB) label({ pos:A.add(AB.multiply(0.5)).add(vec(0,0.3,0)), text:`|AB|=${magAB.toFixed(2)}`, color:color.orange, box:true, height:12 });
+        if(dBA) label({ pos:B.add(BA.multiply(0.5)).add(vec(0,0.3,0)), text:`|BA|=${magBA.toFixed(2)}`, color:color.orange, box:true, height:12 });
+      }
+
+      // Mini axes at tips
+      if(dAB) miniAxes(A, magAB * 0.8);
+      if(dBA) miniAxes(B, magBA * 0.8);
+
+      // Update table
+      updateRow("rowAB", AB);
+      updateRow("rowBA", BA);
+
+      // Animate arcs scaled to 60% of magnitude
+      if(dAB){
+        if(aX) animateArcAt(A, vec(1,0,0), AB.norm(), magAB * 0.6, color.magenta);
+        if(aY) animateArcAt(A, vec(0,1,0), AB.norm(), magAB * 0.6, color.magenta);
+        if(aZ) animateArcAt(A, vec(0,0,1), AB.norm(), magAB * 0.6, color.magenta);
+      }
+      if(dBA){
+        if(aX) animateArcAt(B, vec(1,0,0), BA.norm(), magBA * 0.6, color.yellow);
+        if(aY) animateArcAt(B, vec(0,1,0), BA.norm(), magBA * 0.6, color.yellow);
+        if(aZ) animateArcAt(B, vec(0,0,1), BA.norm(), magBA * 0.6, color.yellow);
+      }
+    }
+
+    function resetAll(){
+      $("#Ax,#Ay,#Az,#Bx,#By,#Bz").val("");
+      $("#drawAB,#drawBA,#showMag,#angleX,#angleY,#angleZ").prop("checked",false);
+      $("table tbody td").slice(1).text("–");
+      drawAll();
+    }
+
+    window.onload = init;
+  })();
+  </script>
+</body>
+</html>

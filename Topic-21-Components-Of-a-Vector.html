@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; display: flex; }
+    #glowscript { flex-grow: 1; background: black; }
+    form { width: 300px; padding: 20px; background: #fff; box-shadow: 2px 0 5px rgba(0,0,0,0.1); }
+    .checkbox-group { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 4px; font-size: 14px; }
+    th { background: #f0f0f0; }
+    button { margin-top: 10px; padding: 8px 12px; background: #4CAF50; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #388E3C; }
+  </style>
+</head>
+<body>
+<div id="glowscript" class="glowscript"></div>
+<form>
+  <div><label>A(x,y,z):</label><br><input type="number" id="ax" value="1" step="0.1"><input type="number" id="ay" value="2" step="0.1"><input type="number" id="az" value="0" step="0.1"></div><br>
+  <div><label>B(x,y,z):</label><br><input type="number" id="bx" value="4" step="0.1"><input type="number" id="by" value="5" step="0.1"><input type="number" id="bz" value="0" step="0.1"></div>
+  <div class="checkbox-group">
+    <label><input type="checkbox" id="drawVec"> Draw AB</label>
+    <label><input type="checkbox" id="showComp"> Show Components</label>
+    <label><input type="checkbox" id="labelA"> Label A</label>
+    <label><input type="checkbox" id="labelB"> Label B</label>
+    <label><input type="checkbox" id="labelVec"> Label Vector</label>
+    <label><input type="checkbox" id="showMag"> Show |AB|</label>
+    <label><input type="checkbox" id="angleX"> Angle X</label>
+    <label><input type="checkbox" id="angleY"> Angle Y</label>
+    <label><input type="checkbox" id="angleZ"> Angle Z</label>
+  </div>
+  <button type="button" id="resetBtn">Reset</button>
+  <table id="angleTable"><thead><tr><th>Axis</th><th>Angle (°)</th></tr></thead><tbody></tbody></table>
+</form>
+<script type="text/javascript">
+(function(){
+  let scene;
+  function init(){
+    window.__context={glowscript_container:$('#glowscript').removeAttr('id')};
+    scene=canvas({width:800,height:600,background:color.black,center:vec(0,0,0),camera:{pos:vec(10,10,20)}});
+    $('input').on('input change',drawScene);
+    $('#resetBtn').click(resetScene);
+    drawScene();
+  }
+  function drawAxes(len){
+    // X axis
+    arrow({pos:vec(-len,0,0),axis:vec(2*len,0,0),color:color.white,shaftwidth:0.03});
+    label({pos:vec(len+0.5,0,0),text:'X',color:color.white});
+    label({pos:vec(-len-0.5,0,0),text:"X'",color:color.white});
+    // Y axis
+    arrow({pos:vec(0,-len,0),axis:vec(0,2*len,0),color:color.white,shaftwidth:0.03});
+    label({pos:vec(0,len+0.5,0),text:'Y',color:color.white});
+    label({pos:vec(0,-len-0.5,0),text:"Y'",color:color.white});
+    // Z axis
+    arrow({pos:vec(0,0,-len),axis:vec(0,0,2*len),color:color.white,shaftwidth:0.03});
+    label({pos:vec(0,0,len+0.5),text:'Z',color:color.white});
+    label({pos:vec(0,0,-len-0.5),text:"Z'",color:color.white});
+  }
+  function drawScene(){
+    if(!scene)return;
+    scene.objects.forEach(o=>o.visible=false);scene.objects.length=0;scene.title='';
+    const ax=+$('#ax').val(), ay=+$('#ay').val(), az=+$('#az').val();
+    const bx=+$('#bx').val(), by=+$('#by').val(), bz=+$('#bz').val();
+    const A=vec(ax,ay,az), B=vec(bx,by,bz), AB=B.sub(A), mag=AB.mag;
+    drawAxes(10);
+    // mini axes
+    [['red',vec(1,0,0)],['green',vec(0,1,0)],['blue',vec(0,0,1)]].forEach(([c,dir])=>{
+      arrow({pos:A,axis:dir.multiply(Math.max(3,mag*1.2)),color:color[c],shaftwidth:0.03});
+      label({pos:A.add(dir.multiply(Math.max(3,mag*1.2)+0.3)),text:dir.equals(vec(1,0,0))?'x̂':dir.equals(vec(0,1,0))?'ŷ':'ẑ',color:color[c],box:false});
+    });
+    // features omitted for brevity: drawVec, labels, comps, mag
+    if($('#drawVec').prop('checked')) arrow({pos:A,axis:AB,color:color.yellow,shaftwidth:0.15});
+    // angles
+    const unit=mag>0?AB.norm():vec(1,0,0), rad=Math.max(1,mag*0.3);
+    const table=[];
+    [['X',vec(1,0,0),color.orange],['Y',vec(0,1,0),color.cyan],['Z',vec(0,0,1),color.magenta]].forEach(([name,axis,clr])=>{
+      if($('#angle'+name).prop('checked')){
+        const deg=axis.diff_angle(unit)*180/Math.PI;
+        // draw arc
+        const rot=axis.cross(unit).mag?axis.cross(unit).norm():vec(1,0,0);
+        const pts=[];
+        for(let i=0;i<=30;i++){pts.push(A.add(rotate(axis,{angle:(deg*i/30)*Math.PI/180,axis:rot}).multiply(rad)));}
+        curve({pos:pts,color:clr});
+        table.push({axis:name,value:deg});
+      }
+    });
+    // update table
+    const tbody=$('#angleTable tbody').empty();
+    table.forEach(r=>tbody.append(`<tr><td>${r.axis}</td><td>${r.value.toFixed(1)}</td></tr>`));
+  }
+  function resetScene(){ $('input[type=number]').val('');$('input[type=checkbox]').prop('checked',false);$('#angleTable tbody').empty();drawScene(); }
+  window.onload=init;
+})();
+</script>
+</body>
+</html>

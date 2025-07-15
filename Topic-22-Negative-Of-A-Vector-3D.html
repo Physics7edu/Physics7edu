@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>3D Vector Visualizer</title>
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #f0f0f0; }
+    #controls { width: 340px; padding: 20px; background: #fff; box-shadow: 2px 0 8px rgba(0,0,0,0.1); overflow-y: auto; }
+    #glowscript { flex-grow: 1; background: black; }
+    h2 { font-size: 16px; margin-top: 0; }
+    .form-group input { width: 60px; margin-right: 10px; }
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .checkbox-group label { width: 48%; }
+    table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 4px 8px; border: 1px solid #ccc; text-align: center; }
+    #resetBtn { padding: 8px; width: 100%; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    #resetBtn:hover { background: #45a049; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <h2>Vector Input</h2>
+    <div class="form-group">
+      <label>X: <input type="number" id="xValue" step="0.1" /></label>
+      <label>Y: <input type="number" id="yValue" step="0.1" /></label>
+      <label>Z: <input type="number" id="zValue" step="0.1" /></label>
+    </div>
+    <h2>Options</h2>
+    <div class="checkbox-group">
+      <label><input type="checkbox" id="drawVec"> Draw A</label>
+      <label><input type="checkbox" id="drawNegVec"> Draw –A</label>
+      <label><input type="checkbox" id="showMag"> Show Magnitudes</label>
+      <label><input type="checkbox" id="angleX"> Angle with X-axis</label>
+      <label><input type="checkbox" id="angleY"> Angle with Y-axis</label>
+      <label><input type="checkbox" id="angleZ"> Angle with Z-axis</label>
+    </div>
+    <button id="resetBtn">Reset</button>
+    <table>
+      <thead><tr><th>Vector</th><th>θ<sub>x</sub></th><th>θ<sub>y</sub></th><th>θ<sub>z</sub></th></tr></thead>
+      <tbody>
+        <tr id="angleA"><td>A</td><td>–</td><td>–</td><td>–</td></tr>
+        <tr id="angleNegA"><td>–A</td><td>–</td><td>–</td><td>–</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="glowscript" class="glowscript"></div>
+
+  <script type="text/javascript">
+  (function(){
+    let scene;
+    function init(){
+      window.__context = { glowscript_container: $('#glowscript').removeAttr('id') };
+      scene = canvas({ width:800, height:600, background: color.black });
+      $('input').on('input change', drawAll);
+      $('#resetBtn').click(resetAll);
+      drawAll();
+    }
+
+    function animateArcAndLabel(origin, axis, dirVec, radius, arcColor){
+      const θ = axis.diff_angle(dirVec);
+      if(!θ || θ===Math.PI) return;
+      const steps = 60, rotA = axis.cross(dirVec).norm();
+      let pts = [], curveObj = curve({ color: arcColor, radius: 0.03, pos: [] });
+      let i = 0;
+      let interval = setInterval(()=>{
+        if(i > steps){
+          clearInterval(interval);
+          // place label at midpoint
+          let mid = pts[Math.floor(steps/2)];
+          label({ pos: mid.add(vec(0.1,0.1,0)), text: (θ*180/Math.PI).toFixed(1)+'°',
+                  color: arcColor, height:12, box:false });
+          return;
+        }
+        let t = θ * i/steps;
+        let p = rotate(axis.norm(), { angle: t, axis: rotA }).multiply(radius).add(origin);
+        pts.push(p);
+        curveObj.append({ pos: p });
+        i++;
+      }, 16);  // ~1 sec
+    }
+
+    function updateTable(rowId, v){
+      let row = $('#'+rowId);
+      if(!v || v.mag===0){
+        row.find('td').slice(1).text('–');
+      } else {
+        row.find('td').eq(1).text((Math.acos(v.x/v.mag)*180/Math.PI).toFixed(1)+'°');
+        row.find('td').eq(2).text((Math.acos(v.y/v.mag)*180/Math.PI).toFixed(1)+'°');
+        row.find('td').eq(3).text((Math.acos(v.z/v.mag)*180/Math.PI).toFixed(1)+'°');
+      }
+    }
+
+    function drawAll(){
+      scene.objects.forEach(o=>o.visible=false);
+      scene.objects.length = 0;
+
+      const x = parseFloat($('#xValue').val())||0,
+            y = parseFloat($('#yValue').val())||0,
+            z = parseFloat($('#zValue').val())||0;
+      const v = vec(x,y,z), vneg = v.multiply(-1);
+      const maxc = Math.max(Math.abs(x),Math.abs(y),Math.abs(z),1),
+            len = 1.5 * maxc, arcR = 0.6 * len;
+
+      // Draw bold axes (positive & negative)
+      [['X',vec(1,0,0)],['Y',vec(0,1,0)],['Z',vec(0,0,1)]].forEach(([L,dir])=>{
+        arrow({ pos: vec(0,0,0), axis: dir.multiply(len), color: color.white, shaftwidth:0.05 });
+        label({ pos: dir.multiply(len+0.3), text: L, color: color.white, height:12 });
+        arrow({ pos: vec(0,0,0), axis: dir.multiply(-len), color: color.white, shaftwidth:0.05 });
+        label({ pos: dir.multiply(-len-0.3), text: L+"'", color: color.white, height:12 });
+      });
+
+      const showA = $('#drawVec').prop('checked'),
+            showN = $('#drawNegVec').prop('checked'),
+            showM = $('#showMag').prop('checked'),
+            angX = $('#angleX').prop('checked'),
+            angY = $('#angleY').prop('checked'),
+            angZ = $('#angleZ').prop('checked');
+
+      // Draw vectors
+      if(showA){
+        arrow({ pos: vec(0,0,0), axis: v, color: color.yellow, shaftwidth:0.2 });
+        label({ pos: v.add(vec(0.2,-0.2,0)), text: `A(${x},${y},${z})`, color: color.white, height:12 });
+        label({ pos: v.multiply(0.5).add(vec(0.3,0.3,0)),
+               text: `${x.toFixed(1)}i + ${y.toFixed(1)}j + ${z.toFixed(1)}k`,
+               color: color.yellow, box:true, background:color.black, opacity:0.6, height:12 });
+      }
+      if(showN){
+        arrow({ pos: vec(0,0,0), axis: vneg, color: color.magenta, shaftwidth:0.2 });
+        label({ pos: vneg.add(vec(-0.2,0.2,0)), text: `A'(${-x},${-y},${-z})`, color: color.magenta, height:12 });
+        label({ pos: vneg.multiply(0.5).add(vec(-0.3,-0.3,0)),
+               text: `${(-x).toFixed(1)}i + ${(-y).toFixed(1)}j + ${(-z).toFixed(1)}k`,
+               color: color.magenta, box:true, background:color.black, opacity:0.6, height:12 });
+      }
+
+      // Magnitudes
+      if(showM){
+        if(showA) label({ pos: v.multiply(0.5).add(vec(0.3,0,0)), text: `|A|=${v.mag.toFixed(2)}`, color: color.orange, box:true, height:12 });
+        if(showN) label({ pos: vneg.multiply(0.5).add(vec(-0.3,0,0)), text: `|–A|=${v.mag.toFixed(2)}`, color: color.orange, box:true, height:12 });
+      }
+
+      // Update table
+      updateTable('angleA', v);
+      updateTable('angleNegA', vneg);
+
+      // Animate arcs with labels
+      if(showA){
+        if(angX) animateArcAndLabel(vec(0,0,0), vec(1,0,0), v.norm(), arcR, color.magenta);
+        if(angY) animateArcAndLabel(vec(0,0,0), vec(0,1,0), v.norm(), arcR, color.magenta);
+        if(angZ) animateArcAndLabel(vec(0,0,0), vec(0,0,1), v.norm(), arcR, color.magenta);
+      }
+      if(showN){
+        if(angX) animateArcAndLabel(vec(0,0,0), vec(1,0,0), vneg.norm(), arcR, color.yellow);
+        if(angY) animateArcAndLabel(vec(0,0,0), vec(0,1,0), vneg.norm(), arcR, color.yellow);
+        if(angZ) animateArcAndLabel(vec(0,0,0), vec(0,0,1), vneg.norm(), arcR, color.yellow);
+      }
+    }
+
+    function resetAll(){
+      $('#xValue,#yValue,#zValue').val('');
+      $('#drawVec,#drawNegVec,#showMag,#angleX,#angleY,#angleZ').prop('checked',false);
+      $('table tbody td').slice(1).text('–');
+      drawAll();
+    }
+
+    window.onload = init;
+  })();
+  </script>
+</body>
+</html>

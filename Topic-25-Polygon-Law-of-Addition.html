@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://www.glowscript.org/css/redmond/2.1/jquery-ui.custom.css" />
+  <link rel="stylesheet" href="https://www.glowscript.org/css/ide.css" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #1f2937;
+      color: #f3f4f6;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+    }
+    #glowscript {
+      flex: 1;
+      margin-left: 20rem;
+    }
+    form {
+      position: fixed;
+      left: 1rem;
+      top: 1rem;
+      width: 18rem;
+      background: #111827;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    input[type="number"] {
+      background: #374151;
+      color: #f3f4f6;
+      border: 1px solid #4b5563;
+      border-radius: 0.25rem;
+      padding: 0.25rem;
+      width: 3.5rem;
+      transition: all 0.2s ease;
+    }
+    input[type="number"]:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+    button {
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #4f46e5;
+    }
+    label {
+      color: #d1d5db;
+    }
+    input[type="checkbox"] {
+      accent-color: #6366f1;
+    }
+  </style>
+</head>
+<body>
+<div id="glowscript" class="glowscript"></div>
+
+<form>
+  <div class="grid grid-cols-1 gap-4">
+    <div class="flex items-center space-x-2">
+      <label class="w-16">A(x₁,y₁,z₁):</label>
+      <input type="number" id="x1" value="2">
+      <input type="number" id="y1" value="3">
+      <input type="number" id="z1" value="0">
+    </div>
+    <div class="flex items-center space-x-2">
+      <label class="w-16">B(x₂,y₂,z₂):</label>
+      <input type="number" id="x2" value="6">
+      <input type="number" id="y2" value="3">
+      <input type="number" id="z2" value="0">
+    </div>
+    <div class="flex items-center space-x-2">
+      <label class="w-16">C(x₃,y₃,z₃):</label>
+      <input type="number" id="x3" value="5">
+      <input type="number" id="y3" value="6">
+      <input type="number" id="z3" value="0">
+    </div>
+    <div class="flex items-center space-x-2">
+      <label class="w-16">D(x₄,y₄,z₄):</label>
+      <input type="number" id="x4" value="7">
+      <input type="number" id="y4" value="2">
+      <input type="number" id="z4" value="0">
+    </div>
+    <div class="flex items-center space-x-2">
+      <label class="w-16">E(x₅,y₅,z₅):</label>
+      <input type="number" id="x5" value="4">
+      <input type="number" id="y5" value="0">
+      <input type="number" id="z5" value="0">
+    </div>
+    <div class="flex items-center space-x-2">
+      <label class="w-16">F(x₆,y₆,z₆):</label>
+      <input type="number" id="x6" value="1">
+      <input type="number" id="y6" value="1">
+      <input type="number" id="z6" value="0">
+    </div>
+    <div class="grid grid-cols-2 gap-2 mt-4">
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="drawAB"> <span>Draw AB</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="labelAB"> <span>Label AB</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="drawBC"> <span>Draw BC</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="labelBC"> <span>Label BC</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="drawCD"> <span>Draw CD</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="labelCD"> <span>Label CD</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="drawDE"> <span>Draw DE</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="labelDE"> <span>Label DE</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="drawEF"> <span>Draw EF</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="labelEF"> <span>Label EF</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="drawAF"> <span>Draw AF</span>
+      </label>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" class="ctrl" id="labelAF"> <span>Label AF</span>
+      </label>
+    </div>
+    <button type="button" id="resetBtn" class="mt-4">Reset</button>
+  </div>
+</form>
+
+<script type="text/javascript">
+(function () {
+  let scene;
+
+  function v3(x, y, z) {
+    return vec(parseFloat(x), parseFloat(y), parseFloat(z));
+  }
+
+  function drawLabel(pos, text, colorVal) {
+    label({ pos: pos.add(vec(0.3, 0.3, 0.3)), text: text, color: colorVal, box: true, background: color.black });
+  }
+
+  function drawVector(from, to, colorVal, drawId, labelId, fromLabel, toLabel) {
+    if (!document.getElementById(drawId).checked) return;
+    let axis = to.sub(from);
+    arrow({ pos: from, axis: axis, color: colorVal, shaftwidth: 0.1 });
+    sphere({ pos: from, radius: 0.15, color: color.red });
+    drawLabel(from, fromLabel, color.white);
+    sphere({ pos: to, radius: 0.15, color: color.red });
+    drawLabel(to, toLabel, color.white);
+    if (document.getElementById(labelId).checked) {
+      let mid = from.add(to).multiply(0.5);
+      drawLabel(mid, `${axis.x.toFixed(1)}i + ${axis.y.toFixed(1)}j + ${axis.z.toFixed(1)}k`, colorVal);
+    }
+  }
+
+  function drawAll() {
+    scene.objects.forEach(o => o.visible = false);
+    scene.objects.length = 0;
+
+    let A = v3(x1.value, y1.value, z1.value);
+    let B = v3(x2.value, y2.value, z2.value);
+    let C = v3(x3.value, y3.value, z3.value);
+    let D = v3(x4.value, y4.value, z4.value);
+    let E = v3(x5.value, y5.value, z5.value);
+    let F = v3(x6.value, y6.value, z6.value);
+
+    drawVector(A, B, color.yellow, "drawAB", "labelAB", `A(${A.x},${A.y},${A.z})`, `B(${B.x},${B.y},${B.z})`);
+    drawVector(B, C, color.cyan, "drawBC", "labelBC", `B(${B.x},${B.y},${B.z})`, `C(${C.x},${C.y},${C.z})`);
+    drawVector(C, D, color.orange, "drawCD", "labelCD", `C(${C.x},${C.y},${C.z})`, `D(${D.x},${D.y},${D.z})`);
+    drawVector(D, E, color.green, "drawDE", "labelDE", `D(${D.x},${D.y},${D.z})`, `E(${E.x},${E.y},${E.z})`);
+    drawVector(E, F, color.magenta, "drawEF", "labelEF", `E(${E.x},${E.y},${E.z})`, `F(${F.x},${F.y},${F.z})`);
+    drawVector(A, F, color.blue, "drawAF", "labelAF", `A(${A.x},${A.y},${A.z})`, `F(${F.x},${F.y},${F.z})`);
+  }
+
+  function setup() {
+    scene = canvas({ width: 800, height: 600, background: color.black, center: vec(0, 0, 0), camera: { pos: vec(10, 10, 10) } });
+    drawAll();
+    document.querySelectorAll(".ctrl, input[type=number]").forEach(el => el.addEventListener("change", drawAll));
+    resetBtn.addEventListener("click", () => {
+      document.querySelectorAll("input[type=number]").forEach((input, i) => {
+        const defaults = [2, 3, 0, 6, 3, 0, 5, 6, 0, 7, 2, 0, 4, 0, 0, 1, 1, 0];
+        input.value = defaults[i];
+      });
+      document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+      drawAll();
+    });
+  }
+
+  window.__context = { glowscript_container: $("#glowscript").removeAttr("id") };
+  setup();
+})();
+</script>
+</body>
+</html>
