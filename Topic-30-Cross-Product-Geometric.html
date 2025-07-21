@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body { margin:0; display:flex; background:#1f2937; color:#f3f4f6; font-family:'Inter',sans-serif; }
+    #controls { width:24rem; padding:1.5rem; background:#111827; box-shadow:2px 0 8px rgba(0,0,0,0.4); height:100vh; overflow-y:auto; }
+    #glowscript { flex:1; height:100vh; }
+    input[type=number], input[type=range] {
+      background:#374151; color:#f3f4f6;
+      border:1px solid #4b5563; border-radius:.25rem;
+      padding:.25rem;
+    }
+    input[type=number] { width:4rem; }
+    input[type=range] { width:8rem; }
+    button {
+      background:#6366f1; color:#fff;
+      padding:.5rem 1rem; border-radius:.375rem;
+      border:none; cursor:pointer;
+    }
+    button:hover { background:#4f46e5; }
+    label { color:#d1d5db; }
+    .grid-group { margin-bottom:1rem; }
+    .section-title { font-size:1.25rem; font-weight:bold; margin:1rem 0 .5rem; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div class="section-title">Vector A</div>
+    <div class="grid-group">
+      <label>Magnitude:</label><br>
+      <input id="magA" type="number" value="5"><input id="sliderMagA" type="range" min="0" max="10" step="0.1" value="5">
+    </div>
+    <div class="grid-group">
+      <label>Angle θ (°):</label><br>
+      <input id="thetaA" type="number" value="45"><input id="sliderThetaA" type="range" min="0" max="360" step="1" value="45">
+    </div>
+    <div class="section-title">Vector B</div>
+    <div class="grid-group">
+      <label>Magnitude:</label><br>
+      <input id="magB" type="number" value="4"><input id="sliderMagB" type="range" min="0" max="10" step="0.1" value="4">
+    </div>
+    <div class="grid-group">
+      <label>Angle θ (°):</label><br>
+      <input id="thetaB" type="number" value="160"><input id="sliderThetaB" type="range" min="0" max="360" step="1" value="160">
+    </div>
+    <div class="grid-group">
+      <label><input type="checkbox" id="showCross" checked /> Show cross product A × B</label>
+    </div>
+    <div class="grid-group">
+      <label><input type="checkbox" id="showCompOA" /> Label OA (xi + yj + zk)</label>
+    </div>
+    <div class="grid-group">
+      <label><input type="checkbox" id="showCompOB" /> Label OB (xi + yj + zk)</label>
+    </div>
+    <div class="grid-group">
+      <label><input type="checkbox" id="showCompCross" /> Label A×B (xi + yj + zk)</label>
+    </div>
+    <button onclick="resetScene()">Reset</button>
+    <div class="section-title mt-4">Calculation</div>
+    <div id="calc" style="font-size:0.875rem;padding:0.5rem;background:#1f2937;border:1px solid #374151;border-radius:0.375rem;"></div>
+  </div>
+  <div id="glowscript" class="glowscript"></div>
+
+  <script>
+    let scene;
+    window.__context = { glowscript_container: document.getElementById("glowscript") };
+
+    function get2DVector(mag,deg){ const r=deg*Math.PI/180; return vec(mag*Math.cos(r), mag*Math.sin(r), 0); }
+
+    function drawScene(){
+      const magA=+$("#magA").val(), thA=+$("#thetaA").val();
+      const magB=+$("#magB").val(), thB=+$("#thetaB").val();
+      const showCross=$("#showCross").is(":checked");
+      const showCompOA=$("#showCompOA").is(":checked");
+      const showCompOB=$("#showCompOB").is(":checked");
+      const showCompCross=$("#showCompCross").is(":checked");
+
+      const A=get2DVector(magA,thA), B=get2DVector(magB,thB);
+      const C = A.cross(B);
+      const crossMag = mag(C);
+
+      if (scene.objects) {
+        scene.objects.forEach(o=>o.visible=false);
+        scene.objects.length=0;
+      }
+
+      arrow({pos:vec(0,0,0),axis:vec(6,0,0),color:color.white,shaftwidth:0.05});
+      arrow({pos:vec(0,0,0),axis:vec(0,6,0),color:color.white,shaftwidth:0.05});
+      label({pos:vec(6.3,0,0),text:'X',box:false,color:color.white,height:12});
+      label({pos:vec(0,6.3,0),text:'Y',box:false,color:color.white,height:12});
+
+      arrow({pos:vec(0,0,0),axis:A,color:color.orange,shaftwidth:0.1});
+      arrow({pos:vec(0,0,0),axis:B,color:color.cyan,shaftwidth:0.1});
+      label({pos:A.add(vec(.3,.3,0)),text:'A',box:false,color:color.orange,height:12});
+      label({pos:B.add(vec(.3,.3,0)),text:'B',box:false,color:color.cyan,height:12});
+
+      if(showCross){
+        const axis = crossMag === 0 ? vec(0,0,1) : C.norm().multiply(crossMag);
+        arrow({pos:vec(0,0,0),axis:axis,color:color.magenta,shaftwidth:0.05});
+        label({pos:axis.norm().multiply(0.5),text:'A×B',box:false,color:color.magenta,height:12});
+      }
+
+      sphere({pos:vec(0,0,0),radius:0.04,color:color.white});
+      label({pos:vec(.2,.2,0),text:'O',box:false,color:color.white,height:12});
+
+      if(showCompOA){
+        const compA = `${A.x.toFixed(2)}i + ${A.y.toFixed(2)}j + ${A.z.toFixed(2)}k`;
+        label({pos:A.multiply(0.5).add(vec(.1,-.1,0)),text:`OA = ${compA}`,box:false,color:color.orange,height:12});
+      }
+      if(showCompOB){
+        const compB = `${B.x.toFixed(2)}i + ${B.y.toFixed(2)}j + ${B.z.toFixed(2)}k`;
+        label({pos:B.multiply(0.5).add(vec(.1,-.1,0)),text:`OB = ${compB}`,box:false,color:color.cyan,height:12});
+      }
+      if(showCompCross && showCross){
+        const compC = `${C.x.toFixed(2)}i + ${C.y.toFixed(2)}j + ${C.z.toFixed(2)}k`;
+        const posC = crossMag === 0 ? vec(0,0,1).multiply(0.5) : C.norm().multiply(crossMag*0.5);
+        label({pos:posC.add(vec(.1,.1,0)),text:`A×B = ${compC}`,box:false,color:color.magenta,height:12});
+      }
+
+      const angle=(Math.acos(A.dot(B)/(magA*magB))*180/Math.PI).toFixed(1);
+      let html = showCross
+        ? `<b>A×B</b> magnitude = |A|·|B|·sinθ = ${magA.toFixed(2)}·${magB.toFixed(2)}·sin(${angle}°) = <b>${crossMag.toFixed(2)}</b>`
+        : '';
+      document.getElementById('calc').innerHTML = html;
+    }
+
+    function resetScene(){
+      ['magA','sliderMagA'].forEach(id=>$('#'+id).val(5));
+      ['thetaA','sliderThetaA'].forEach(id=>$('#'+id).val(45));
+      ['magB','sliderMagB'].forEach(id=>$('#'+id).val(4));
+      ['thetaB','sliderThetaB'].forEach(id=>$('#'+id).val(160));
+      $('#showCross,#showCompOA,#showCompOB,#showCompCross').prop('checked',false);
+      drawScene();
+    }
+
+    $(function(){
+      scene = canvas({width:window.innerWidth-400,height:window.innerHeight,background:color.black});
+      [['magA','sliderMagA'],['thetaA','sliderThetaA'],['magB','sliderMagB'],['thetaB','sliderThetaB']]
+        .forEach(([a,b])=>{$('#'+a).on('input',()=>{$('#'+b).val($('#'+a).val());drawScene();});$('#'+b).on('input',()=>{$('#'+a).val($('#'+b).val());drawScene();});});
+      $('#showCross,#showCompOA,#showCompOB,#showCompCross').on('change',drawScene);
+      setTimeout(drawScene,100);
+    });
+  </script>
+</body>
+</html>
