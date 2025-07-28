@@ -1,3 +1,4 @@
+<!-- Full code with OA and OB label checkboxes -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -26,7 +27,10 @@
     button:hover { background:#4f46e5; }
     label { color:#d1d5db; }
     .grid-group { margin-bottom:1rem; }
-    .section-title { font-size:1.25rem; font-weight:bold; margin:1rem 0 .5rem; }
+    .section-title {
+      font-size:1.25rem; font-weight:bold;
+      margin:1rem 0 .5rem;
+    }
   </style>
 </head>
 <body>
@@ -40,6 +44,7 @@
       <label>Angle θ (°):</label><br>
       <input id="thetaA" type="number" value="45"><input id="sliderThetaA" type="range" min="0" max="360" step="1" value="45">
     </div>
+
     <div class="section-title">Vector B</div>
     <div class="grid-group">
       <label>Magnitude:</label><br>
@@ -49,20 +54,30 @@
       <label>Angle θ (°):</label><br>
       <input id="thetaB" type="number" value="160"><input id="sliderThetaB" type="range" min="0" max="360" step="1" value="160">
     </div>
+
     <div class="grid-group">
-      <label><input type="checkbox" id="showOAComp" /> Show OA label (xi + yj + zk)</label>
+      <label><input type="checkbox" id="projBonA" checked /> Show projection of OB on OA</label>
     </div>
     <div class="grid-group">
-      <label><input type="checkbox" id="showOBComp" /> Show OB label (xi + yj + zk)</label>
+      <label><input type="checkbox" id="projAonB" checked /> Show projection of OA on OB</label>
     </div>
+
+    <div class="grid-group">
+      <label><input type="checkbox" id="showOALabel" /> Show OA label (xi + yj + zk)</label>
+    </div>
+    <div class="grid-group">
+      <label><input type="checkbox" id="showOBLabel" /> Show OB label (xi + yj + zk)</label>
+    </div>
+
     <button onclick="resetScene()">Reset</button>
+
     <div class="section-title mt-4">Calculation</div>
-    <div id="calc" style="font-size:0.875rem;padding:0.5rem;background:#1f2937;border:1px solid #374151;border-radius:0.375rem;"></div>
+    <div id="opCalculation" style="font-size: 0.875rem; padding: 0.5rem; background-color: #1f2937; border: 1px solid #374151; border-radius: 0.375rem;"></div>
   </div>
 
   <div id="glowscript" class="glowscript"></div>
 
-  <script>
+  <script type="text/javascript">
     let scene;
     window.__context = { glowscript_container: document.getElementById("glowscript") };
 
@@ -71,66 +86,103 @@
       return vec(mag * Math.cos(r), mag * Math.sin(r), 0);
     }
 
+    function formatVec(v) {
+      return `${v.x.toFixed(2)}i + ${v.y.toFixed(2)}j + ${v.z.toFixed(2)}k`;
+    }
+
+    function drawDashedLine(start, end, segs = 20) {
+      const d = end.sub(start).div(segs);
+      for (let i = 0; i < segs; i += 2) {
+        const p1 = start.add(d.multiply(i));
+        const p2 = start.add(d.multiply(i + 1));
+        curve({ pos: [p1, p2], color: color.orange, radius: 0.015 });
+      }
+    }
+
     function drawScene() {
       const magA = +$("#magA").val(), thA = +$("#thetaA").val();
       const magB = +$("#magB").val(), thB = +$("#thetaB").val();
-      const showOAComp = $("#showOAComp").is(":checked");
-      const showOBComp = $("#showOBComp").is(":checked");
+      const showBonA = $("#projBonA").is(":checked");
+      const showAonB = $("#projAonB").is(":checked");
+      const showOALabel = $("#showOALabel").is(":checked");
+      const showOBLabel = $("#showOBLabel").is(":checked");
 
-      const A = get2DVector(magA, thA);
-      const B = get2DVector(magB, thB);
+      const A = get2DVector(magA, thA), B = get2DVector(magB, thB);
+      const Ah = A.norm(), Bh = B.norm();
+      const projBonA = B.dot(Ah);
+      const projAonB = A.dot(Bh);
+      const P = Ah.multiply(projBonA);
+      const Q = Bh.multiply(projAonB);
 
-      if (scene.objects) {
-        scene.objects.forEach(o => o.visible = false);
-        scene.objects.length = 0;
+      scene.objects.forEach(o => o.visible = false);
+      scene.objects.length = 0;
+
+      [[6,0],[-6,0],[0,6],[0,-6]].forEach(([x,y])=>
+        arrow({pos:vec(0,0,0),axis:vec(x,y,0),color:color.white,shaftwidth:0.05})
+      );
+
+      arrow({pos:vec(0,0,0),axis:A,color:color.orange,shaftwidth:0.1});
+      label({pos:A.add(vec(.3,.3,0)),text:"A",box:false,color:color.orange,height:12});
+      if (showOALabel) {
+        label({pos:A.add(vec(.3,-.3,0)),text:"OA = " + formatVec(A),box:false,color:color.orange,height:10});
       }
 
-      arrow({ pos: vec(0, 0, 0), axis: vec(6, 0, 0), color: color.white, shaftwidth: 0.05 });
-      arrow({ pos: vec(0, 0, 0), axis: vec(0, 6, 0), color: color.white, shaftwidth: 0.05 });
-      label({ pos: vec(6.3, 0, 0), text: 'X', box: false, color: color.white, height: 12 });
-      label({ pos: vec(0, 6.3, 0), text: 'Y', box: false, color: color.white, height: 12 });
-
-      arrow({ pos: vec(0, 0, 0), axis: A, color: color.orange, shaftwidth: 0.1 });
-      arrow({ pos: vec(0, 0, 0), axis: B, color: color.cyan, shaftwidth: 0.1 });
-
-      label({ pos: A.add(vec(0.3, 0.3, 0)), text: 'A', box: false, color: color.orange, height: 12 });
-      label({ pos: B.add(vec(0.3, 0.3, 0)), text: 'B', box: false, color: color.cyan, height: 12 });
-
-      sphere({ pos: vec(0, 0, 0), radius: 0.04, color: color.white });
-      label({ pos: vec(0.2, 0.2, 0), text: 'O', box: false, color: color.white, height: 12 });
-
-      if (showOAComp) {
-        const compA = `${A.x.toFixed(2)}i + ${A.y.toFixed(2)}j + ${A.z.toFixed(2)}k`;
-        label({ pos: A.multiply(0.5).add(vec(0.2, -0.2, 0)), text: `OA = ${compA}`, box: false, color: color.orange, height: 12 });
+      arrow({pos:vec(0,0,0),axis:B,color:color.cyan,shaftwidth:0.1});
+      label({pos:B.add(vec(.3,.3,0)),text:"B",box:false,color:color.cyan,height:12});
+      if (showOBLabel) {
+        label({pos:B.add(vec(.3,-.3,0)),text:"OB = " + formatVec(B),box:false,color:color.cyan,height:10});
       }
 
-      if (showOBComp) {
-        const compB = `${B.x.toFixed(2)}i + ${B.y.toFixed(2)}j + ${B.z.toFixed(2)}k`;
-        label({ pos: B.multiply(0.5).add(vec(0.2, -0.2, 0)), text: `OB = ${compB}`, box: false, color: color.cyan, height: 12 });
+      if (showBonA) {
+        curve({pos:[B,P],color:color.yellow,radius:0.03});
+        sphere({pos:P,radius:0.07,color:color.white});
+        label({pos:P.add(vec(.2,.2,0)),text:"P",box:false,color:color.white,height:12});
+        arrow({pos:vec(0,0,0),axis:P,color:color.green,shaftwidth:0.05});
+        label({pos:P.multiply(0.5).add(vec(0.2,0.1,0)),text:`OP = ${projBonA.toFixed(2)}`,box:false,color:color.green,height:12});
+        if (P.mag > A.mag) drawDashedLine(A,P);
+        if (P.mag < -1e-5) drawDashedLine(vec(0,0,0),P);
       }
 
-      const angle = (Math.acos(A.dot(B) / (magA * magB)) * 180 / Math.PI).toFixed(1);
-      document.getElementById('calc').innerHTML = `<b>Angle between A and B:</b> ${angle}°`;
+      if (showAonB) {
+        curve({pos:[A,Q],color:color.magenta,radius:0.03});
+        sphere({pos:Q,radius:0.07,color:color.white});
+        label({pos:Q.add(vec(.2,.2,0)),text:"Q",box:false,color:color.white,height:12});
+        arrow({pos:vec(0,0,0),axis:Q,color:color.yellow,shaftwidth:0.05});
+        label({pos:Q.multiply(0.5).add(vec(0.2,-0.1,0)),text:`OQ = ${projAonB.toFixed(2)}`,box:false,color:color.yellow,height:12});
+        if (Q.mag > B.mag) drawDashedLine(B,Q);
+        if (Q.mag < -1e-5) drawDashedLine(vec(0,0,0),Q);
+      }
+
+      sphere({pos:vec(0,0,0),radius:0.04,color:color.white});
+      label({pos:vec(0,0,0).add(vec(0.2,0.2,0)),text:"O",box:false,color:color.white,height:12});
+
+      let html = '';
+      if (showBonA) html += `<b>OP (B on A)</b><br> = |B|×cosθ = ${magB.toFixed(2)}×cos(${(Math.acos(Ah.dot(Bh))*180/Math.PI).toFixed(1)}°) = <b>${projBonA.toFixed(2)}</b>`;
+      if (showBonA && showAonB) html += '<br><br>';
+      if (showAonB) html += `<b>OQ (A on B)</b><br> = |A|×cosϕ = ${magA.toFixed(2)}×cos(${(Math.acos(Ah.dot(Bh))*180/Math.PI).toFixed(1)}°) = <b>${projAonB.toFixed(2)}</b>`;
+      document.getElementById("opCalculation").innerHTML = html;
     }
 
     function resetScene() {
-      ['magA', 'sliderMagA'].forEach(id => $('#' + id).val(5));
-      ['thetaA', 'sliderThetaA'].forEach(id => $('#' + id).val(45));
-      ['magB', 'sliderMagB'].forEach(id => $('#' + id).val(4));
-      ['thetaB', 'sliderThetaB'].forEach(id => $('#' + id).val(160));
-      $('#showOAComp, #showOBComp').prop('checked', false);
+      ["magA","sliderMagA"].forEach(id=>$("#"+id).val(5));
+      ["thetaA","sliderThetaA"].forEach(id=>$("#"+id).val(45));
+      ["magB","sliderMagB"].forEach(id=>$("#"+id).val(4));
+      ["thetaB","sliderThetaB"].forEach(id=>$("#"+id).val(160));
+      $("#projBonA").prop('checked',true);
+      $("#projAonB").prop('checked',true);
+      $("#showOALabel").prop('checked',false);
+      $("#showOBLabel").prop('checked',false);
       drawScene();
     }
 
-    $(function () {
-      scene = canvas({ width: window.innerWidth - 400, height: window.innerHeight, background: color.black });
-      [['magA', 'sliderMagA'], ['thetaA', 'sliderThetaA'], ['magB', 'sliderMagB'], ['thetaB', 'sliderThetaB']]
-        .forEach(([a, b]) => {
-          $('#' + a).on('input', () => { $('#' + b).val($('#' + a).val()); drawScene(); });
-          $('#' + b).on('input', () => { $('#' + a).val($('#' + b).val()); drawScene(); });
-        });
-      $('#showOAComp,#showOBComp').on('change', drawScene);
-      setTimeout(drawScene, 100);
+    $(function(){
+      scene = canvas({width:window.innerWidth-400,height:window.innerHeight,background:color.black});
+      [["magA","sliderMagA"],["thetaA","sliderThetaA"],["magB","sliderMagB"],["thetaB","sliderThetaB"]].forEach(([a,b])=>{
+        $("#"+a).on("input",()=>{ $("#"+b).val($("#"+a).val()); drawScene(); });
+        $("#"+b).on("input",()=>{ $("#"+a).val($("#"+b).val()); drawScene(); });
+      });
+      $("#projBonA,#projAonB,#showOALabel,#showOBLabel").on("change",drawScene);
+      setTimeout(drawScene,100);
     });
   </script>
 </body>
