@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <!-- GlowScript & jQuery -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <style>
+    :root { --gs-h: 240px; --g-h: 250px; }
+    body { margin: 0; background: #1f2937; color: #f3f4f6; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
+    #main { height: 100vh; display: flex; }
+    #controls { width: 24rem; padding: 1.2rem 1.5rem; background: #111827; overflow-y: auto; box-sizing: border-box; }
+    #visuals { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #gs-holder { height: var(--gs-h); width: 100%; margin: 0; padding: 0; }
+    #glowscript { height: 100%; width: 100%; }
+    #graph-holder { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .graph-box { height: var(--g-h); }
+    .graph-box canvas { width: 100% !important; height: 100% !important; background: #1f2937; display: block; }
+    .section-title { font-size: 1.05rem; font-weight: 600; margin: .8rem 0 .4rem; }
+    button { background: #6366f1; color: #fff; padding: .45rem .9rem; border-radius: .375rem; border: none; cursor: pointer; margin-right: .4rem; margin-bottom: .4rem; font-size: .85rem; }
+    button:hover { background: #4f46e5; }
+    label { color: #d1d5db; display: block; margin-bottom: .35rem; font-size: .85rem; }
+    .speed-display { margin-left: 0.5rem; font-size: 0.85rem; }
+    .form-group { display: flex; align-items: center; margin-bottom: 0.5rem; }
+    #speedInput { color: black; }
+  </style>
+</head>
+<body>
+<div id="main">
+  <div id="controls">
+    <div class="section-title">Displacement vs Distance</div>
+    <button id="btnPlay">Play</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset">Reset</button>
+
+    <div class="section-title">Options</div>
+    <label><input type="checkbox" id="showDistance" checked> Show Distance Graph</label>
+    <label><input type="checkbox" id="showDisplacement" checked> Show Displacement Graph</label>
+
+    <div class="section-title">Speed Control</div>
+    <input type="range" id="speedSlider" min="1" max="10" value="5">
+    <form id="speedForm" class="form-group">
+      <input type="number" id="speedInput" min="1" max="10" step="0.1" value="5" required>
+      <button type="submit" class="ml-2 bg-blue-500 text-white px-2 py-1 rounded">Set</button>
+    </form>
+    <span id="speedDisplay" class="speed-display">Speed: 31.42 m/s</span>
+  </div>
+
+  <div id="visuals">
+    <div id="gs-holder"><div id="glowscript" class="glowscript"></div></div>
+    <div id="graph-holder">
+      <div class="graph-box"><canvas id="distanceChart"></canvas></div>
+      <div class="graph-box"><canvas id="displacementChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Constants ---------- */
+const R = 10, T = 10;
+const OMEGA = 2 * Math.PI / T;
+const DT = 0.05;
+const BASE_SPEED = (2 * Math.PI * R) / T;
+
+/* ---------- State ---------- */
+let scene, ball, distance = 0, displacement = 0, time = 0, theta = 0;
+let speedMult = 5, animTimer = null;
+let distChart, dispChart;
+
+/* ---------- Init Scene ---------- */
+function initScene(){
+  const holder = document.getElementById('gs-holder');
+  const w = holder.getBoundingClientRect().width || (window.innerWidth - 24 * 16);
+  const h = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gs-h')) || 240;
+
+  window.__context = { glowscript_container: document.getElementById('glowscript') };
+  scene = canvas({ width: w, height: h, background: color.black });
+  scene.autoscale = false; scene.userzoom = false; scene.userspin = false;
+  scene.center = vec(0, 0, 0);
+  scene.range = R * 1.4;
+
+  const ballR = 1.0;
+
+  let points = [];
+  for(let a = 0; a <= 2 * Math.PI; a += Math.PI / 50){
+    points.push(vec(R * Math.cos(a), R * Math.sin(a), 0));
+  }
+  curve({ pos: points, color: color.white, radius: 0.08 });
+
+  // Labels
+  const labelAngles = [0, Math.PI/2, Math.PI, 3*Math.PI/2];
+  const labelTexts = ['0°', '90°', '180°', '270°'];
+  labelAngles.forEach((a,i)=>{
+    label({ pos: vec(R*Math.cos(a)*1.2, R*Math.sin(a)*1.2, 0), text: labelTexts[i], box:false, color:color.white, height:20 });
+  });
+
+  // Radius label (always right side)
+  label({ pos: vec(R*1.8, 0, 0), text: `Radius: ${R} m`, box: false, color: color.white, height: 20, align: "left" });
+
+  ball = sphere({ pos: vec(R, 0, 0), radius: ballR, color: color.orange, make_trail: true });
+}
+
+/* ---------- Init Charts ---------- */
+function initCharts(){
+  const baseOpts = {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    plugins:{ legend:{ labels:{ color:'#f3f4f6', font:{ size:12 } } } },
+    scales:{
+      x:{ ticks:{ color:'#f3f4f6' }, title:{ display:true, text:'Time (s)', color:'#f3f4f6' } },
+      y:{ ticks:{ color:'#f3f4f6' }, title:{ display:true, text:'', color:'#f3f4f6' }, min:0 }
+    }
+  };
+
+  distChart = new Chart(distanceChart.getContext('2d'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ label:'Distance (m)', borderColor:'#10b981', data:[], borderWidth:2, pointRadius:0 }] },
+    options: JSON.parse(JSON.stringify(baseOpts))
+  });
+  distChart.options.scales.y.title.text = 'Distance (m)';
+
+  dispChart = new Chart(displacementChart.getContext('2d'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ label:'Displacement (m)', borderColor:'#3b82f6', data:[], borderWidth:2, pointRadius:0 }] },
+    options: JSON.parse(JSON.stringify(baseOpts))
+  });
+  dispChart.options.scales.y.title.text = 'Displacement (m)';
+}
+
+/* ---------- Tick ---------- */
+function tick(){
+  theta += OMEGA * DT * speedMult;
+  ball.pos = vec(R * Math.cos(theta), R * Math.sin(theta), 0);
+
+  distance = R * Math.abs(theta);
+  let normalizedTheta = theta % (2*Math.PI);
+  if (normalizedTheta < 0) normalizedTheta += 2*Math.PI;
+  displacement = 2 * R * Math.sin(normalizedTheta / 2);
+
+  // Auto-expand Y-axis
+  if (distance > (distChart.options.scales.y.max || 20)) {
+    distChart.options.scales.y.max = Math.ceil(distance / 5) * 5;
+  }
+
+  const t = time.toFixed(1);
+  distChart.data.labels.push(t);
+  dispChart.data.labels.push(t);
+  distChart.data.datasets[0].data.push(distance.toFixed(2));
+  dispChart.data.datasets[0].data.push(displacement.toFixed(2));
+  distChart.update('none');
+  dispChart.update('none');
+
+  document.getElementById('speedDisplay').textContent = `Speed: ${(BASE_SPEED * speedMult).toFixed(2)} m/s`;
+  time += DT;
+}
+
+/* ---------- Controls ---------- */
+function startMotion(){ if(!animTimer) animTimer=setInterval(tick,100); }
+function pauseMotion(){ clearInterval(animTimer); animTimer=null; }
+function resetMotion(){
+  pauseMotion(); time=0; distance=0; displacement=0; theta=0;
+  ball.clear_trail(); ball.pos=vec(R,0,0);
+  [distChart,dispChart].forEach(c=>{c.data.labels=[];c.data.datasets[0].data=[];c.update();});
+}
+
+btnPlay.onclick=startMotion;
+btnPause.onclick=pauseMotion;
+btnReset.onclick=resetMotion;
+
+document.getElementById('speedSlider').oninput = e => {
+  speedMult = parseFloat(e.target.value);
+  document.getElementById('speedInput').value = speedMult;
+};
+
+document.getElementById('speedForm').onsubmit = e => {
+  e.preventDefault();
+  let val = parseFloat(document.getElementById('speedInput').value);
+  if(val<1) val=1; if(val>10) val=10;
+  speedMult = val;
+  document.getElementById('speedSlider').value = speedMult;
+};
+
+/* ---------- Init ---------- */
+$(function(){ initScene(); initCharts(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <!-- GlowScript & jQuery -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <!-- Chart.js (version 3.9.1 for stability) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <style>
+    :root{ --gs-h:240px; --g-h:250px; }
+    body{margin:0;background:#1f2937;color:#f3f4f6;font-family:'Inter',sans-serif;height:100vh;overflow:hidden;}
+    #main{height:100vh;display:flex;}
+    #controls{width:24rem;padding:1.2rem 1.5rem;background:#111827;overflow-y:auto;box-sizing:border-box;}
+    #visuals{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+    #gs-holder{height:var(--gs-h);width:100%;margin:0;padding:0;}
+    #glowscript{height:100%;width:100%;}
+    #graph-holder{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+    .graph-box{height:var(--g-h);}
+    .graph-box canvas{width:100% !important;height:100% !important;background:#1f2937;display:block;}
+    .section-title{font-size:1.05rem;font-weight:600;margin:.8rem 0 .4rem;}
+    button{background:#6366f1;color:#fff;padding:.45rem .9rem;border-radius:.375rem;border:none;cursor:pointer;margin-right:.4rem;margin-bottom:.4rem;font-size:.85rem;}
+    button:hover{background:#4f46e5;}
+    label{color:#d1d5db;display:block;margin-bottom:.35rem;font-size:.85rem;}
+  </style>
+</head>
+<body>
+<div id="main">
+  <div id="controls">
+    <div class="section-title">Displacement vs Distance</div>
+    <button id="btnPlay">Play</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset">Reset</button>
+
+    <div class="section-title">Options</div>
+    <label><input type="checkbox" id="showDistance" checked> Show Distance Graph</label>
+    <label><input type="checkbox" id="showDisplacement" checked> Show Displacement Graph</label>
+
+    <div class="section-title">Speed Control</div>
+    <input type="range" id="speedRange" min="1" max="10" value="5">
+  </div>
+
+  <div id="visuals">
+    <div id="gs-holder"><div id="glowscript" class="glowscript"></div></div>
+    <div id="graph-holder">
+      <div class="graph-box"><canvas id="distanceChart"></canvas></div>
+      <div class="graph-box"><canvas id="displacementChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Error logger ---------- */
+window.onerror = (m,u,l,c,e)=>console.error('JS Error:',m,'@',u+':'+l+':'+c,e);
+
+/* ---------- Constants ---------- */
+const L_MIN = 0, L_MAX = 25;       // metres
+const DT = 0.05;                   // s per tick
+const STEP_BASE = 0.04;            // m per tick at speed=1
+
+/* ---------- State ---------- */
+let scene, ball;
+let distance = 0, displacement = 0, time = 0;
+let direction = 1;
+let speedMult = 5;
+let animTimer = null;
+let prevX = L_MIN;
+
+let distChart, dispChart;
+
+/* ---------- Init scene ---------- */
+function initScene(){
+  const holder = document.getElementById('gs-holder');
+  const w = holder.getBoundingClientRect().width || (window.innerWidth - 24 * 16);
+  const h = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gs-h')) || 240;
+
+  window.__context = { glowscript_container: document.getElementById('glowscript') };
+  scene = canvas({ width:w, height:h, background:color.black });
+  scene.autoscale = false; scene.userzoom = false; scene.userspin = false;
+
+  // Span exactly 0–25 horizontally, adjusted to fill canvas width
+  scene.center = vec((L_MIN + L_MAX)/2, 0.8, 0);
+  scene.range = 3;              // Reduced to stretch path to canvas edges
+
+  const trackY = 0, ballR = 1.0, labelH = 30; // Ball radius reduced by 50%
+
+  curve({ pos:[vec(L_MIN, trackY, 0), vec(L_MAX, trackY, 0)], color:color.white, radius:0.08 });
+  for(let x=L_MIN; x<=L_MAX; x+=5){
+    const labelX = x === L_MIN ? L_MIN + 0.5 : x === L_MAX ? L_MAX - 0.5 : x;
+    curve({ pos:[vec(x, trackY-0.35, 0), vec(x, trackY+0.35, 0)], color:color.gray(0.7) });
+    label({ pos:vec(labelX, trackY+2.0, 0), text:`${x} m`, box:false, color:color.white, height:labelH });
+  }
+
+  ball = sphere({ pos:vec(L_MIN, trackY + ballR*0.6, 0), radius:ballR, color:color.orange, make_trail:true });
+}
+
+/* ---------- Init charts ---------- */
+function initCharts(){
+  const baseOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    layout: { padding: 0 },
+    plugins: {
+      legend: {
+        labels: {
+          color: '#f3f4f6',
+          font: { size: 12 }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: '#f3f4f6',
+          font: { size: 10 }
+        },
+        title: {
+          display: true,
+          text: 'Time (s)',
+          color: '#f3f4f6',
+          font: { size: 12 }
+        }
+      },
+      y: {
+        ticks: {
+          color: '#f3f4f6',
+          font: { size: 10 }
+        },
+        title: {
+          display: true,
+          text: '',
+          color: '#f3f4f6',
+          font: { size: 12 }
+        },
+        min: L_MIN,
+        max: L_MAX
+      }
+    }
+  };
+
+  distChart = new Chart(document.getElementById('distanceChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Distance (m)',
+        borderColor: '#10b981',
+        data: [],
+        borderWidth: 2,
+        pointRadius: 0
+      }]
+    },
+    options: JSON.parse(JSON.stringify(baseOpts))
+  });
+  distChart.options.scales.y.title.text = 'Distance (m)';
+
+  dispChart = new Chart(document.getElementById('displacementChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Displacement (m)',
+        borderColor: '#3b82f6',
+        data: [],
+        borderWidth: 2,
+        pointRadius: 0
+      }]
+    },
+    options: JSON.parse(JSON.stringify(baseOpts))
+  });
+  dispChart.options.scales.y.title.text = 'Displacement (m)';
+  dispChart.update();
+}
+
+/* ---------- Tick ---------- */
+function tick(){
+  let x = prevX + direction * STEP_BASE * speedMult;
+  if(x > L_MAX){ x = L_MAX; direction = -1; }
+  if(x < L_MIN){ x = L_MIN; direction = 1; }
+
+  ball.pos.x = x;
+
+  distance += Math.abs(x - prevX);
+  displacement = x - L_MIN;
+  prevX = x;
+  time += DT;
+
+  // Update distance graph y-axis if distance exceeds 25
+  if(distance > L_MAX){
+    distChart.options.scales.y.max = Math.ceil(distance / 5) * 5; // Round up to nearest 5
+  }
+
+  const t = time.toFixed(1);
+  distChart.data.labels.push(t);
+  dispChart.data.labels.push(t);
+  distChart.data.datasets[0].data.push(showDistance.checked ? distance.toFixed(2) : null);
+  dispChart.data.datasets[0].data.push(showDisplacement.checked ? displacement.toFixed(2) : null);
+  distChart.update('none');
+  dispChart.update('none');
+}
+
+/* ---------- Controls ---------- */
+function startMotion(){ if(!animTimer) animTimer = setInterval(tick, 100); }
+function pauseMotion(){ clearInterval(animTimer); animTimer = null; }
+function resetMotion(){
+  pauseMotion();
+  time=0; distance=0; displacement=0; direction=1; prevX=L_MIN;
+  if(ball){ ball.clear_trail(); ball.pos.x = L_MIN; }
+  [distChart, dispChart].forEach(c=>{
+    c.data.labels = [];
+    c.data.datasets[0].data = [];
+    c.options.scales.y.max = L_MAX; // Reset distance y-axis to 25
+    c.update();
+  });
+}
+
+/* ---------- Wire up ---------- */
+btnPlay.onclick = startMotion;
+btnPause.onclick = pauseMotion;
+btnReset.onclick = resetMotion;
+speedRange.oninput = e => speedMult = parseFloat(e.target.value);
+
+window.addEventListener('resize',()=>{ try{ scene.width = document.getElementById('gs-holder').getBoundingClientRect().width; }catch{} });
+
+$(function(){ initScene(); initCharts(); });
+
+/* ---------- Tiny tests ---------- */
+console.assert(typeof direction !== 'undefined', 'direction missing');
+console.assert(L_MIN===0 && L_MAX===25, 'Bounds changed unexpectedly');
+</script>
+</body>
+</html>

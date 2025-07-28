@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <!-- GlowScript & jQuery -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <style>
+    :root{ --gs-h:240px; --g-h:250px; }
+    body{margin:0;background:#1f2937;color:#f3f4f6;font-family:'Inter',sans-serif;height:100vh;overflow:hidden;}
+    #main{height:100vh;display:flex;}
+    #controls{width:24rem;padding:1.2rem 1.5rem;background:#111827;overflow-y:auto;box-sizing:border-box;}
+    #visuals{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+    #gs-holder{height:var(--gs-h);}
+    #glowscript{height:100%;}
+    #graph-holder{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+    .graph-box{height:var(--g-h);}
+    .graph-box canvas{width:100% !important;height:100% !important;background:#1f2937;}
+    .section-title{font-size:1.1rem;font-weight:600;margin:.8rem 0 .4rem;}
+    button{background:#6366f1;color:#fff;padding:.4rem .8rem;border-radius:.3rem;border:none;cursor:pointer;margin-right:.4rem;margin-bottom:.4rem;}
+    button:hover{background:#4f46e5;}
+    label{color:#d1d5db;display:block;margin-bottom:.35rem;}
+    #directionLabel{margin-top:0.5rem;font-size:1rem;font-weight:bold;}
+  </style>
+</head>
+<body>
+<div id="main">
+  <div id="controls">
+    <div class="section-title">Speed vs Velocity</div>
+    <button id="btnPlay">Play</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset">Reset</button>
+
+    <div class="section-title">Speed Control</div>
+    <input type="range" id="speedRange" min="1" max="10" value="5" />
+    <div id="directionLabel">Direction: Moving Right</div>
+  </div>
+
+  <div id="visuals">
+    <div id="gs-holder"><div id="glowscript"></div></div>
+    <div id="graph-holder">
+      <div class="graph-box"><canvas id="speedChart"></canvas></div>
+      <div class="graph-box"><canvas id="velocityChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const L_MIN = 0, L_MAX = 25;
+const DT = 0.05;
+const STEP_BASE = 0.04;
+
+let scene, ball;
+let time = 0, prevX = L_MIN;
+let direction = 1, speedMult = 5;
+let animTimer = null;
+
+let speedChart, velocityChart;
+
+function initScene(){
+  const holder = document.getElementById('gs-holder');
+  const w = holder.getBoundingClientRect().width || 600;
+  const h = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gs-h')) || 240;
+
+  window.__context = { glowscript_container: document.getElementById('glowscript') };
+  scene = canvas({ width:w, height:h, background:color.black });
+  scene.autoscale = false; scene.userzoom = false; scene.userspin = false;
+
+  scene.center = vec((L_MIN+L_MAX)/2,0.8,0);
+  scene.range = 3;
+
+  const trackY = 0, ballR = 1.0;
+  curve({ pos:[vec(L_MIN,trackY,0),vec(L_MAX,trackY,0)], color:color.white, radius:0.08 });
+
+  for(let x=L_MIN; x<=L_MAX; x+=5){
+    curve({ pos:[vec(x,trackY-0.3,0), vec(x,trackY+0.3,0)], color:color.gray(0.7) });
+    label({ pos:vec(x,trackY+1,0), text:`${x} m`, box:false, color:color.white, height:20 });
+  }
+
+  ball = sphere({ pos:vec(L_MIN,trackY+ballR*0.6,0), radius:ballR, color:color.orange, make_trail:true });
+}
+
+function initCharts(){
+  const baseOpts = {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    plugins:{ legend:{ labels:{ color:'#f3f4f6' } } },
+    scales:{
+      x:{ ticks:{ color:'#f3f4f6' }, title:{ display:true, text:'Time (s)', color:'#f3f4f6' } },
+      y:{ ticks:{ color:'#f3f4f6' }, title:{ display:true, text:'', color:'#f3f4f6' } }
+    }
+  };
+
+  speedChart = new Chart(document.getElementById('speedChart').getContext('2d'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ label:'Speed (m/s)', borderColor:'#10b981', data:[], borderWidth:2, pointRadius:0 }] },
+    options: JSON.parse(JSON.stringify(baseOpts))
+  });
+  speedChart.options.scales.y.title.text = 'Speed (m/s)';
+
+  velocityChart = new Chart(document.getElementById('velocityChart').getContext('2d'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ label:'Velocity (m/s)', borderColor:'#3b82f6', data:[], borderWidth:2, pointRadius:0 }] },
+    options: JSON.parse(JSON.stringify(baseOpts))
+  });
+  velocityChart.options.scales.y.title.text = 'Velocity (m/s)';
+  velocityChart.options.scales.y.min = -10;
+  velocityChart.options.scales.y.max = 10;
+}
+
+function tick(){
+  let x = prevX + direction * STEP_BASE * speedMult;
+  if(x > L_MAX){ x = L_MAX; direction = -1; }
+  if(x < L_MIN){ x = L_MIN; direction = 1; }
+
+  ball.pos.x = x;
+
+  const dx = x - prevX;
+  const velocity = dx/DT;
+  const speed = Math.abs(velocity);
+
+  document.getElementById("directionLabel").innerText = direction===1 ? "Direction: Moving Right" : "Direction: Moving Left";
+
+  const t = time.toFixed(1);
+  speedChart.data.labels.push(t);
+  velocityChart.data.labels.push(t);
+  speedChart.data.datasets[0].data.push(speed.toFixed(2));
+  velocityChart.data.datasets[0].data.push(velocity.toFixed(2));
+
+  speedChart.update('none');
+  velocityChart.update('none');
+
+  prevX = x;
+  time += DT;
+}
+
+function startMotion(){ if(!animTimer) animTimer = setInterval(tick, 50); }
+function pauseMotion(){ clearInterval(animTimer); animTimer = null; }
+function resetMotion(){
+  pauseMotion();
+  time = 0; prevX = L_MIN; direction = 1;
+  ball.pos.x = L_MIN; ball.clear_trail();
+  [speedChart, velocityChart].forEach(c=>{ c.data.labels=[]; c.data.datasets[0].data=[]; c.update(); });
+}
+
+btnPlay.onclick = startMotion;
+btnPause.onclick = pauseMotion;
+btnReset.onclick = resetMotion;
+speedRange.oninput = e => speedMult = parseFloat(e.target.value);
+
+$(function(){ initScene(); initCharts(); });
+</script>
+</body>
+</html>
