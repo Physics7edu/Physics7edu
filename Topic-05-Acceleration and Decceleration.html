@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    :root { --gs-h: 300px; --g-h: 220px; }
+    body { margin:0; background:#1f2937; color:#f3f4f6; font-family:'Inter',sans-serif; height:100vh; overflow:hidden; }
+    #main { height:100vh; display:flex; }
+    #controls { width:24rem; padding:1.2rem; background:#111827; overflow-y:auto; }
+    #visuals { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+    #gs-holder { height:var(--gs-h); }
+    #glowscript { width:100%; height:100%; }
+    #graph-holder { flex:1; display:flex; flex-direction:column; }
+    .graph-box { flex:1; height:var(--g-h); }
+    .graph-box canvas { background:#1f2937; }
+    button { background:#6366f1; color:#fff; padding:.4rem .8rem; margin:.3rem; border:none; border-radius:4px; }
+    button:hover { background:#4f46e5; }
+    label, input { display:block; margin:.4rem 0; }
+    input[type=number] { color:black; padding:0.2rem; width:6rem; }
+  </style>
+</head>
+<body>
+<div id="main">
+  <div id="controls">
+    <h2 class="text-lg font-bold mb-2">Acceleration & Speed</h2>
+    <button id="btnPlay">Play</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset">Reset</button>
+
+    <label>Initial Speed (m/s): <input type="number" id="initialSpeed" value="2" min="0" step="0.1"></label>
+    <label>Acceleration (m/s²): <input type="number" id="acceleration" value="0.5" step="0.1"></label>
+
+    <p id="instSpeed">Instantaneous Speed: 0 m/s</p>
+    <p id="avgSpeed">Average Speed: 0 m/s</p>
+  </div>
+
+  <div id="visuals">
+    <div id="gs-holder"><div id="glowscript"></div></div>
+    <div id="graph-holder">
+      <div class="graph-box"><canvas id="speedChart"></canvas></div>
+      <div class="graph-box"><canvas id="distanceChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DT = 0.05;
+const L_MIN = 0, L_MAX = 100;
+
+let scene, ball;
+let v0 = 2, a = 0.5;
+let v = v0, x = L_MIN, time = 0, distance = 0;
+let animTimer = null;
+let speedChart, distChart;
+let speedLabel, timeLabel, distanceLabel, avgSpeedLabel;
+
+function initScene() {
+  const holder = document.getElementById("gs-holder");
+  const w = holder.getBoundingClientRect().width;
+  const h = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--gs-h"));
+
+  window.__context = { glowscript_container: document.getElementById("glowscript") };
+  scene = canvas({ width:w, height:h, background:color.black });
+  scene.autoscale = false;
+  scene.userzoom = false;
+  scene.userspin = false;
+
+  // Proper centering and margin so 0m & 100m are visible
+  scene.center = vec((L_MIN + L_MAX) / 2, 8, 0);
+  const aspect = w / h;
+  scene.range = (L_MAX - L_MIN) / 2 / aspect + 4;
+
+  const trackY = 0;
+  curve({ pos:[vec(L_MIN,trackY,0), vec(L_MAX,trackY,0)], color:color.white, radius:0.05 });
+
+  for (let X=L_MIN; X<=L_MAX; X+=10){
+    curve({pos:[vec(X,trackY-0.3,0),vec(X,trackY+0.3,0)],color:color.gray(0.7)});
+    label({pos:vec(X,trackY+2,0), text:`${X} m`, box:false, color:color.white, height:20});
+  }
+
+  ball = sphere({ pos:vec(L_MIN, trackY+0.6, 0), radius:1, color:color.orange, make_trail:true });
+
+  // Four counters at y=20,16,12,8
+  speedLabel    = label({pos:vec((L_MIN+L_MAX)/2, 20, 0), text:"Speed: 0 m/s", box:false, color:color.yellow, height:20});
+  timeLabel     = label({pos:vec((L_MIN+L_MAX)/2, 16, 0), text:"Time: 0 s", box:false, color:color.white, height:20});
+  distanceLabel = label({pos:vec((L_MIN+L_MAX)/2, 12, 0), text:"Distance: 0 m", box:false, color:color.cyan, height:20});
+  avgSpeedLabel = label({pos:vec((L_MIN+L_MAX)/2, 8, 0),  text:"Avg Speed: 0 m/s", box:false, color:color.green, height:20});
+}
+
+function initCharts() {
+  const baseOpts = {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    plugins:{legend:{labels:{color:"#f3f4f6"}}},
+    scales:{x:{ticks:{color:"#f3f4f6"}, title:{display:true,text:"Time (s)",color:"#f3f4f6"}},
+            y:{ticks:{color:"#f3f4f6"}, title:{display:true,text:"",color:"#f3f4f6"}}}
+  };
+
+  speedChart = new Chart(document.getElementById("speedChart"), {
+    type:"line",
+    data:{ labels:[], datasets:[{ label:"Speed (m/s)", borderColor:"#10b981", data:[], borderWidth:2, pointRadius:0 }] },
+    options:JSON.parse(JSON.stringify(baseOpts))
+  });
+  speedChart.options.scales.y.title.text="Speed (m/s)";
+
+  distChart = new Chart(document.getElementById("distanceChart"), {
+    type:"line",
+    data:{ labels:[], datasets:[{ label:"Distance (m)", borderColor:"#3b82f6", data:[], borderWidth:2, pointRadius:0 }] },
+    options:JSON.parse(JSON.stringify(baseOpts))
+  });
+  distChart.options.scales.y.title.text="Distance (m)";
+}
+
+function tick() {
+  if(x >= L_MAX){ pause(); return; }
+
+  v += a*DT;
+  if(v<0) v=0;
+  x += v*DT;
+  distance += v*DT;
+  time += DT;
+
+  ball.pos.x = x;
+
+  const avgSpeed = distance / time;
+
+  speedLabel.text    = `Speed: ${v.toFixed(2)} m/s`;
+  timeLabel.text     = `Time: ${time.toFixed(2)} s`;
+  distanceLabel.text = `Distance: ${distance.toFixed(2)} m`;
+  avgSpeedLabel.text = `Avg Speed: ${avgSpeed.toFixed(2)} m/s`;
+
+  const tStr = time.toFixed(1);
+  speedChart.data.labels.push(tStr);
+  speedChart.data.datasets[0].data.push(v.toFixed(2));
+  speedChart.update("none");
+
+  distChart.data.labels.push(tStr);
+  distChart.data.datasets[0].data.push(distance.toFixed(2));
+  distChart.update("none");
+}
+
+function start(){ if(!animTimer) animTimer=setInterval(tick,50); }
+function pause(){ clearInterval(animTimer); animTimer=null; }
+function reset(){
+  pause(); v=v0; x=L_MIN; time=0; distance=0;
+  ball.pos.x=L_MIN; ball.clear_trail();
+  speedLabel.text="Speed: 0 m/s";
+  timeLabel.text="Time: 0 s";
+  distanceLabel.text="Distance: 0 m";
+  avgSpeedLabel.text="Avg Speed: 0 m/s";
+  speedChart.data.labels=[]; speedChart.data.datasets[0].data=[]; speedChart.update();
+  distChart.data.labels=[]; distChart.data.datasets[0].data=[]; distChart.update();
+}
+
+btnPlay.onclick=start;
+btnPause.onclick=pause;
+btnReset.onclick=reset;
+
+initialSpeed.oninput=()=>{ v0=parseFloat(initialSpeed.value); v=v0; };
+acceleration.oninput=()=>{ a=parseFloat(acceleration.value); };
+
+window.addEventListener("resize",()=>{ scene.width=document.getElementById("gs-holder").getBoundingClientRect().width; });
+
+$(function(){ initScene(); initCharts(); });
+</script>
+</body>
+</html>
