@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body { margin:0; background:#1f2937; color:#f3f4f6; font-family:'Inter',sans-serif; height:100vh; display:flex; }
+    #leftPane { width:22rem; padding:1.2rem; background:#111827; }
+    #rightPane { flex:1; display:flex; }
+    #sceneHolder { flex:1; }
+    #graphHolder { flex:1; display:flex; flex-direction:column; }
+    .graphBox { flex:1; border-top:1px solid #333; }
+    canvas { background:#1f2937; }
+    input[type=range] { width:100%; }
+    input[type=number] { color:black; width:5rem; padding:0.2rem; }
+    button { background:#6366f1; color:#fff; padding:0.3rem 0.8rem; margin:0.2rem; border:none; border-radius:4px; }
+    button:hover { background:#4f46e5; }
+  </style>
+</head>
+<body>
+  <div id="leftPane">
+    <h2 class="text-lg font-bold mb-2">Vertical Motion</h2>
+    <label>Initial Velocity (m/s):
+      <input type="range" id="velSlider" min="0" max="100" step="1" value="50">
+      <input type="number" id="velInput" value="50" min="0" max="100" step="1">
+    </label>
+    <button id="btnPlay">Play</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset">Reset</button>
+  </div>
+
+  <div id="rightPane">
+    <div id="sceneHolder"><div id="glowscript"></div></div>
+    <div id="graphHolder">
+      <div class="graphBox"><canvas id="vtChart"></canvas></div>
+      <div class="graphBox"><canvas id="htChart"></canvas></div>
+    </div>
+  </div>
+
+<script>
+const g = 10, DT = 0.02;
+let v0 = 50, v = v0, y = 0, t = 0;
+let scene, ball, arrowVel, animTimer = null;
+let vtChart, htChart;
+let speedLabel, heightLabel, maxHeightLabel, timeLabel;
+
+function calculateMaxValues() {
+  const maxHeight = (v0 * v0) / (2 * g);
+  const totalTime = (2 * v0) / g;
+  return { maxHeight, totalTime };
+}
+
+function initScene() {
+  const w = document.getElementById("sceneHolder").getBoundingClientRect().width;
+  if (!window.__context) window.__context = { glowscript_container: document.getElementById("glowscript") };
+  scene = canvas({ width:w, height:window.innerHeight, background:color.black });
+  scene.autoscale = false;
+  scene.userzoom = false;
+  scene.userspin = false;
+
+  scene.center = vec(-110, 250, 0);
+  scene.range = 300;
+
+  const scaleX = -110;
+  curve({ pos:[vec(scaleX,0,0), vec(scaleX,500,0)], color:color.white, radius:0.05 });
+
+  for (let i = 0; i <= 500; i += 10) {
+    const tickLength = (i % 50 === 0) ? 0.6 : 0.3;
+    curve({ pos:[vec(scaleX-tickLength,i,0), vec(scaleX,i,0)], color:color.white });
+    if (i % 50 === 0) {
+      label({ pos:vec(scaleX-30,i,0), text:`${i}`, box:false, height:16, color:color.white });
+    }
+  }
+
+  ball = sphere({ pos:vec(scaleX+1.5,0,0), radius:6, color:color.orange, make_trail:true });
+  arrowVel = arrow({ pos:ball.pos, axis:vec(0,0,0), color:color.red, shaftwidth:1.5 });
+
+  speedLabel = label({ pos:vec(40, 460, 0), text:"Speed: 0 m/s", box:false, color:color.yellow, height:20 });
+  heightLabel = label({ pos:vec(40, 420, 0), text:"Height: 0 m", box:false, color:color.cyan, height:20 });
+  maxHeightLabel = label({ pos:vec(40, 380, 0), text:"Max Height: 0 m", box:false, color:color.green, height:20 });
+  timeLabel = label({ pos:vec(40, 340, 0), text:"Time: 0 s", box:false, color:color.white, height:20 });
+}
+
+function createChart(ctx, label, color, yMin, yMax) {
+  return new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [
+      { label: label, data: [], borderColor: color, borderWidth: 2, pointRadius: 0 },
+      { label: 'Marker', data: [], borderColor: 'yellow', borderWidth: 1, pointRadius: 0, showLine: true },
+      { label: 'Point', data: [], borderColor: 'yellow', backgroundColor: 'yellow', pointRadius: 4, showLine: false }
+    ]},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      parsing: false,
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Time (s)', color: '#f3f4f6' },
+          ticks: { color: '#f3f4f6', callback: v => v+'s', stepSize: 1 },
+          min: 0,
+          max: Math.ceil((2*v0)/g)
+        },
+        y: {
+          title: { display: true, text: label.includes('Velocity')?'Velocity (m/s)':'Height (m)', color: color },
+          ticks: { color: '#f3f4f6' },
+          min: yMin,
+          max: yMax
+        }
+      }
+    }
+  });
+}
+
+function initCharts() {
+  const { maxHeight } = calculateMaxValues();
+  vtChart = createChart(document.getElementById('vtChart'), 'Velocity vs Time', '#ef4444', -Math.abs(v0), Math.abs(v0));
+  htChart = createChart(document.getElementById('htChart'), 'Height vs Time', '#3b82f6', 0, Math.ceil(maxHeight));
+}
+
+function tick() {
+  v -= g * DT;
+  y += v * DT;
+  t += DT;
+  if (y <= 0) { y = 0; pause(); }
+
+  ball.pos.y = y;
+
+  const speed = parseFloat(v.toFixed(2));
+  const h = parseFloat(y.toFixed(2));
+
+  arrowVel.pos = ball.pos;
+  arrowVel.axis = vec(0, Math.sign(v) * Math.abs(v) * 0.1, 0);
+
+  speedLabel.text = `Speed: ${Math.abs(speed).toFixed(2)} m/s`;
+  heightLabel.text = `Height: ${h} m`;
+  timeLabel.text = `Time: ${t.toFixed(2)} s`;
+
+  if (vtChart && htChart) {
+    vtChart.data.datasets[0].data.push({ x: t, y: v });
+    htChart.data.datasets[0].data.push({ x: t, y: h });
+
+    vtChart.data.datasets[1].data = [{ x: t, y: 0 }, { x: t, y: v }];
+    htChart.data.datasets[1].data = [{ x: t, y: 0 }, { x: t, y: h }];
+
+    vtChart.data.datasets[2].data = [{ x: t, y: v }];
+    htChart.data.datasets[2].data = [{ x: t, y: h }];
+
+    vtChart.update('none');
+    htChart.update('none');
+  }
+}
+
+function updateMaxHeight() {
+  const hMax = (v0 * v0) / (2 * g);
+  maxHeightLabel.text = `Max Height: ${hMax.toFixed(2)} m`;
+}
+
+function start() { if (!animTimer) animTimer = setInterval(tick, 20); }
+function pause() { clearInterval(animTimer); animTimer = null; }
+function reset() {
+  pause(); v = v0; y = 0; t = 0;
+  ball.pos.y = 0; ball.clear_trail();
+  arrowVel.pos = ball.pos;
+  arrowVel.axis = vec(0, 0, 0);
+  if (vtChart) vtChart.destroy();
+  if (htChart) htChart.destroy();
+  initCharts();
+  updateMaxHeight();
+}
+
+document.getElementById('velSlider').oninput = e => {
+  v0 = parseFloat(e.target.value);
+  document.getElementById('velInput').value = v0;
+  v = v0;
+  updateMaxHeight();
+  if (vtChart) vtChart.destroy();
+  if (htChart) htChart.destroy();
+  initCharts();
+};
+
+document.getElementById('velInput').oninput = e => {
+  v0 = parseFloat(e.target.value);
+  document.getElementById('velSlider').value = v0;
+  v = v0;
+  updateMaxHeight();
+  if (vtChart) vtChart.destroy();
+  if (htChart) htChart.destroy();
+  initCharts();
+};
+
+document.getElementById('btnPlay').onclick = start;
+document.getElementById('btnPause').onclick = pause;
+document.getElementById('btnReset').onclick = reset;
+
+$(function() {
+  initScene();
+  initCharts();
+  updateMaxHeight();
+});
+</script>
+</body>
+</html>
