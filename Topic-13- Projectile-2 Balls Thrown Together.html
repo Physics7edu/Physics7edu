@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#1f2937; color:#f3f4f6; font-family:'Inter',sans-serif; }
+    body { display:flex; height:100vh; overflow:hidden; }
+    #leftPane { width:26rem; padding:1rem; background:#111827; overflow-y:auto; display:flex; flex-direction:column; gap:0.75rem; }
+    .section-title { font-weight:800; margin-top:0.25rem; }
+    .card { background:#1f2937; padding:0.7rem; border-radius:0.5rem; box-shadow:0 0 6px rgba(0,0,0,0.3); }
+    .row { display:flex; gap:0.5rem; align-items:center; }
+    .row > * { flex:1; }
+    .label { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; font-weight:600; }
+    input[type=range]{ width:100%; }
+    input[type=number]{ width:5rem; color:black; padding:0.2rem; border-radius:0.3rem; }
+    .button-group { display:flex; gap:0.5rem; }
+    .button-group button { flex:1; background:#6366f1; color:white; padding:0.4rem; border:none; border-radius:0.3rem; font-weight:700; }
+    .button-group button:hover { background:#4f46e5; }
+    .counters { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+    .counter { background:linear-gradient(135deg,#1f2937,#374151); padding:0.45rem 0.6rem; border-radius:0.5rem; box-shadow:0 2px 6px rgba(0,0,0,.5); display:flex; justify-content:space-between; align-items:center; font-weight:600; font-size:0.95rem; }
+    .pill { font-size:0.75rem; font-weight:800; padding:0.1rem 0.4rem; border-radius:999px; }
+    .pillA { background:#f59e0b; color:#111827; }
+    .pillB { background:#a855f7; color:white; }
+    .valA { color:#fde68a; font-weight:800; }
+    .valB { color:#d8b4fe; font-weight:800; }
+    #rightPane { flex:1; display:flex; flex-direction:row; height:100%; }
+    #sceneHolder { flex:1; height:100%; display:flex; }
+    #glowscript { flex:1; }
+    #graphHolder { flex:1; display:flex; flex-direction:column; height:100%; }
+    .graphBox { flex:1; border-top:1px solid #333; }
+    #graphHolder canvas { width:100% !important; height:100% !important; }
+    .note { font-size:.8rem; color:#cbd5e1; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div id="leftPane">
+    <h2 class="text-lg section-title">Projectile Motion — Two Balls</h2>
+
+    <!-- Ball A Controls -->
+    <div class="card">
+      <div class="label"><span>Ball A</span><span class="pill pillA">A</span></div>
+      <div class="label">Speed (m/s)</div>
+      <div class="row">
+        <input type="range" id="speedSliderA" min="0" max="100" step="1" value="100">
+        <input type="number" id="speedInputA" min="0" max="100" step="1" value="100">
+      </div>
+      <div class="label">Angle (°)</div>
+      <div class="row">
+        <input type="range" id="angleSliderA" min="0" max="90" step="1" value="45">
+        <input type="number" id="angleInputA" min="0" max="90" step="1" value="45">
+      </div>
+    </div>
+
+    <!-- Ball B Controls -->
+    <div class="card">
+      <div class="label"><span>Ball B</span><span class="pill pillB">B</span></div>
+      <div class="label">Speed (m/s)</div>
+      <div class="row">
+        <input type="range" id="speedSliderB" min="0" max="100" step="1" value="70">
+        <input type="number" id="speedInputB" min="0" max="100" step="1" value="70">
+      </div>
+      <div class="label">Angle (°)</div>
+      <div class="row">
+        <input type="range" id="angleSliderB" min="0" max="90" step="1" value="35">
+        <input type="number" id="angleInputB" min="0" max="90" step="1" value="35">
+      </div>
+    </div>
+
+    <!-- Time & Buttons -->
+    <div class="card">
+      <div class="label">Select Time (s) <span class="note" id="tofNote"></span></div>
+      <div class="row">
+        <input type="range" id="timeSlider" min="0" max="20" step="0.01" value="0">
+        <input type="number" id="timeInput" min="0" max="20" step="0.01" value="0">
+      </div>
+      <div class="button-group" style="margin-top:0.4rem;">
+        <button id="btnPlay">Play</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </div>
+
+    <!-- Counters A & B -->
+    <div class="counters">
+      <div class="card">
+        <div class="label"><span>Ball A</span><span class="pill pillA">A</span></div>
+        <div class="counter"><span>Vx</span><span class="valA" id="VxA">0.0</span></div>
+        <div class="counter"><span>Vy</span><span class="valA" id="VyA">0.0</span></div>
+        <div class="counter"><span>Angle vs Horizontal</span><span class="valA" id="AngHA">0.0</span></div>
+        <div class="counter"><span>Angle vs Down Vertical</span><span class="valA" id="AngVA">0.0</span></div>
+        <div class="counter"><span>Max Range</span><span class="valA" id="RangeA">0.0</span></div>
+        <div class="counter"><span>Max Height</span><span class="valA" id="HeightA">0.0</span></div>
+      </div>
+      <div class="card">
+        <div class="label"><span>Ball B</span><span class="pill pillB">B</span></div>
+        <div class="counter"><span>Vx</span><span class="valB" id="VxB">0.0</span></div>
+        <div class="counter"><span>Vy</span><span class="valB" id="VyB">0.0</span></div>
+        <div class="counter"><span>Angle vs Horizontal</span><span class="valB" id="AngHB">0.0</span></div>
+        <div class="counter"><span>Angle vs Down Vertical</span><span class="valB" id="AngVB">0.0</span></div>
+        <div class="counter"><span>Max Range</span><span class="valB" id="RangeB">0.0</span></div>
+        <div class="counter"><span>Max Height</span><span class="valB" id="HeightB">0.0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="rightPane">
+    <div id="sceneHolder"><div id="glowscript"></div></div>
+    <div id="graphHolder">
+      <div class="graphBox"><canvas id="velocityChart"></canvas></div>
+      <div class="graphBox"><canvas id="angleChart"></canvas></div>
+    </div>
+  </div>
+
+<script>
+/* ---------- CONSTANTS ---------- */
+const TRACK_FONT_PX = 14;
+const V_TICK = 50;
+const LEFT_MARGIN_FRAC = 0.10;
+const CHART_X_MIN = 0, CHART_X_MAX = 20;
+const g = 10, DT = 0.02;
+
+/* ---------- STATE ---------- */
+let A = { speed:100, angle:45, v0x:0, v0y:0, TOF:0, R:0, H:0, x:0, y:0, vy:0 };
+let B = { speed:70,  angle:35, v0x:0, v0y:0, TOF:0, R:0, H:0, x:0, y:0, vy:0 };
+let t=0, scene, animTimer=null;
+
+/* VPython objects */
+let ballA, ballB, vxA, vyA, vA, vxB, vyB, vB;
+let hLineA, vLineA, hLabA, vLabA;
+let hLineB, vLineB, hLabB, vLabB;
+
+/* Charts */
+let velocityChart, angleChart;
+
+/* ---------- HELPERS ---------- */
+const toRad = d => d*Math.PI/180;
+const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+function niceStep(rangeTarget){
+  const steps = [1,2,5,10,20,50,100,200,500,1000,2000,5000];
+  for (const s of steps) if (rangeTarget/s <= 12) return s;
+  return steps[steps.length-1];
+}
+function compute(ball){
+  const rad = toRad(ball.angle);
+  ball.v0x = ball.speed*Math.cos(rad);
+  ball.v0y = ball.speed*Math.sin(rad);
+  ball.TOF = ball.v0y>0 ? 2*ball.v0y/g : 0;
+  ball.R   = (ball.speed*ball.speed*Math.sin(2*rad))/g;
+  ball.H   = (ball.speed*ball.speed*Math.sin(rad)*Math.sin(rad))/(2*g);
+}
+function computeBoth(){
+  compute(A); compute(B);
+  document.getElementById('tofNote').textContent = `(TOF A ≈ ${A.TOF.toFixed(2)} s, B ≈ ${B.TOF.toFixed(2)} s)`;
+  document.getElementById('RangeA').textContent = A.R.toFixed(1);
+  document.getElementById('HeightA').textContent = A.H.toFixed(1);
+  document.getElementById('RangeB').textContent = B.R.toFixed(1);
+  document.getElementById('HeightB').textContent = B.H.toFixed(1);
+}
+
+/* ---------- TRAIL TOGGLING ---------- */
+function setTrailMode(on){
+  // guard if scene not ready yet
+  if (!ballA || !ballB) return;
+  ballA.make_trail = on;
+  ballB.make_trail = on;
+}
+
+/* ---------- SCENE ---------- */
+function initScene(){
+  const container = document.getElementById("glowscript");
+  container.innerHTML = "";
+  if(typeof window.__context !== "undefined") delete window.__context;
+  window.__context = { glowscript_container: container };
+
+  computeBoth();
+
+  const Rmax = Math.max(A.R, B.R);
+  const Hmax = Math.max(A.H, B.H);
+  const YMAX = Math.ceil((Hmax + 20) / V_TICK) * V_TICK;
+  const leftMargin = LEFT_MARGIN_FRAC * Math.max(Rmax, YMAX);
+
+  scene = canvas({ width: container.clientWidth || 600, height: container.clientHeight || 400, background: color.black });
+  scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+
+  const cx = (Rmax + leftMargin)/2, cy = YMAX/2;
+  scene.center = vec(cx, cy, 0);
+  scene.range  = Math.max(cx, cy) * 1.2;
+
+  drawTracks(Rmax, YMAX, leftMargin);
+
+  const base = Math.max(Rmax+leftMargin, YMAX) || 100;
+  const shaft = base/300;
+
+  // Ball A (NOTE: make_trail:false here)
+  ballA = sphere({ pos:vec(0,0,0), radius: base/150, color: color.orange, make_trail:false });
+  vxA = arrow({ pos:ballA.pos, axis:vec(A.v0x,0,0), color: color.red,   shaftwidth: shaft });
+  vyA = arrow({ pos:ballA.pos, axis:vec(0,A.v0y,0), color: color.green, shaftwidth: shaft });
+  vA  = arrow({ pos:ballA.pos, axis:vec(A.v0x,A.v0y,0), color: color.cyan,  shaftwidth: shaft });
+  hLineA = curve({ pos:[ballA.pos, vec(ballA.pos.x,0,0)], color:color.white });
+  vLineA = curve({ pos:[ballA.pos, vec(0,ballA.pos.y,0)], color:color.white });
+  hLabA = label({ pos:ballA.pos, text:"", height:14, color:color.yellow, box:false, yoffset:12 });
+  vLabA = label({ pos:ballA.pos, text:"", height:14, color:color.yellow, box:false, xoffset:12 });
+
+  // Ball B (NOTE: make_trail:false here)
+  ballB = sphere({ pos:vec(0,0,0), radius: base/150, color: color.purple, make_trail:false, opacity:0.95 });
+  vxB = arrow({ pos:ballB.pos, axis:vec(B.v0x,0,0), color: color.red,   shaftwidth: shaft });
+  vyB = arrow({ pos:ballB.pos, axis:vec(0,B.v0y,0), color: color.green, shaftwidth: shaft });
+  vB  = arrow({ pos:ballB.pos, axis:vec(B.v0x,B.v0y,0), color: color.cyan,  shaftwidth: shaft });
+  hLineB = curve({ pos:[ballB.pos, vec(ballB.pos.x,0,0)], color:color.white });
+  vLineB = curve({ pos:[ballB.pos, vec(0,ballB.pos.y,0)], color:color.white });
+  hLabB = label({ pos:ballB.pos, text:"", height:14, color:vec(0.7,0.8,1), box:false, yoffset:12 });
+  vLabB = label({ pos:ballB.pos, text:"", height:14, color:vec(0.7,0.8,1), box:false, xoffset:12 });
+}
+
+function drawTracks(Rmax, YMAX, leftMargin){
+  const origin = vec(0,0,0);
+  const labelX = -leftMargin * 0.5;
+
+  curve({ pos:[origin, vec(0,YMAX,0)], color:color.white, radius:0.05 });
+  for(let yy=0; yy<=YMAX+1e-6; yy+=V_TICK){
+    const tick = (yy % (5*V_TICK) === 0) ? 2 : 1;
+    curve({ pos:[vec(-tick,yy,0), vec(0,yy,0)], color:color.white });
+    label({ pos:vec(labelX,yy,0), text:String(yy), box:false, height:TRACK_FONT_PX, color:color.white });
+  }
+
+  const xStep = niceStep(Rmax || 1);
+  curve({ pos:[origin, vec(Rmax,0,0)], color:color.white, radius:0.05 });
+  for(let xx=0; xx<=Rmax+1e-6; xx+=xStep){
+    const tick = (xx % (5*xStep) === 0) ? 2 : 1;
+    curve({ pos:[vec(xx,0,0), vec(xx,-tick,0)], color:color.white });
+    label({ pos:vec(xx,-V_TICK*0.12,0), text:String(xx), box:false, height:TRACK_FONT_PX, color:color.white });
+  }
+}
+
+/* ---------- CHARTS ---------- */
+function initCharts(){
+  if(velocityChart) velocityChart.destroy();
+  if(angleChart) angleChart.destroy();
+
+  velocityChart = new Chart(document.getElementById('velocityChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'A: Vx (m/s)', data:[], borderColor:'#f59e0b', borderWidth:2, pointRadius:0 },
+      { label:'A: Vy (m/s)', data:[], borderColor:'#84cc16', borderWidth:2, pointRadius:0 },
+      { label:'B: Vx (m/s)', data:[], borderColor:'#a855f7', borderWidth:2, pointRadius:0 },
+      { label:'B: Vy (m/s)', data:[], borderColor:'#22c55e', borderWidth:2, pointRadius:0 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ type:'linear', min:CHART_X_MIN, max:CHART_X_MAX, title:{display:true, text:'Time (s)', color:'#f3f4f6'}, ticks:{color:'#f3f4f6'} },
+        y:{ title:{display:true, text:'Velocity (m/s)', color:'#f3f4f6'}, min:-100, max:100, ticks:{color:'#f3f4f6'} }
+      },
+      plugins:{ legend:{ labels:{ color:'#f3f4f6' } } }
+    }
+  });
+
+  angleChart = new Chart(document.getElementById('angleChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'A: Angle vs Down Vert (°)', data:[], borderColor:'#fb923c', borderWidth:2, pointRadius:0 }, // orange
+      { label:'A: Angle vs Horizontal (°)', data:[], borderColor:'#22d3ee', borderWidth:2, pointRadius:0 }, // cyan
+      { label:'B: Angle vs Down Vert (°)', data:[], borderColor:'#c084fc', borderWidth:2, pointRadius:0 }, // purple
+      { label:'B: Angle vs Horizontal (°)', data:[], borderColor:'#60a5fa', borderWidth:2, pointRadius:0, borderDash:[6,4] } // blue dashed
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ type:'linear', min:CHART_X_MIN, max:CHART_X_MAX, title:{display:true, text:'Time (s)', color:'#f3f4f6'}, ticks:{color:'#f3f4f6'} },
+        y:{ title:{display:true, text:'Angle (°)', color:'#f3f4f6'}, min:0, max:90, ticks:{color:'#f3f4f6'} }
+      },
+      plugins:{ legend:{ labels:{ color:'#f3f4f6' } } }
+    }
+  });
+}
+
+/* ---------- UI / COUNTERS ---------- */
+function updatePerpendiculars(){
+  // A
+  hLineA.modify(0, ballA.pos); hLineA.modify(1, vec(ballA.pos.x,0,0));
+  vLineA.modify(0, ballA.pos); vLineA.modify(1, vec(0,ballA.pos.y,0));
+  hLabA.pos = ballA.pos; vLabA.pos = ballA.pos;
+  hLabA.text = `${ballA.pos.x.toFixed(1)}`; vLabA.text = `${ballA.pos.y.toFixed(1)}`;
+  // B
+  hLineB.modify(0, ballB.pos); hLineB.modify(1, vec(ballB.pos.x,0,0));
+  vLineB.modify(0, ballB.pos); vLineB.modify(1, vec(0,ballB.pos.y,0));
+  hLabB.pos = ballB.pos; vLabB.pos = ballB.pos;
+  hLabB.text = `${ballB.pos.x.toFixed(1)}`; vLabB.text = `${ballB.pos.y.toFixed(1)}`;
+}
+function updateCounters(){
+  const angHA = Math.abs(Math.atan2(A.vy, A.v0x) * 180/Math.PI);
+  const angVA = Math.abs(Math.atan2(A.v0x, Math.abs(A.vy)) * 180/Math.PI);
+  const angHB = Math.abs(Math.atan2(B.vy, B.v0x) * 180/Math.PI);
+  const angVB = Math.abs(Math.atan2(B.v0x, Math.abs(B.vy)) * 180/Math.PI);
+
+  document.getElementById('VxA').textContent = A.v0x.toFixed(1);
+  document.getElementById('VyA').textContent = A.vy.toFixed(1);
+  document.getElementById('AngHA').textContent = angHA.toFixed(1);
+  document.getElementById('AngVA').textContent = angVA.toFixed(1);
+
+  document.getElementById('VxB').textContent = B.v0x.toFixed(1);
+  document.getElementById('VyB').textContent = B.vy.toFixed(1);
+  document.getElementById('AngHB').textContent = angHB.toFixed(1);
+  document.getElementById('AngVB').textContent = angVB.toFixed(1);
+}
+
+/* ---------- STATE FROM TIME ---------- */
+function setBallState(ball, tSel){
+  const tt = clamp(tSel, 0, ball.TOF);
+  const vy = ball.v0y - g*tt;
+  const x  = ball.v0x * tt;
+  const y  = ball.v0y * tt - 0.5*g*tt*tt;
+  return {t:tt, x:x, y:Math.max(0,y), vy:vy};
+}
+function setStateFromTime(tSel){
+  // A
+  const sA = setBallState(A, tSel); A.x=sA.x; A.y=sA.y; A.vy=sA.vy;
+  ballA.pos = vec(A.x, A.y, 0);
+  vxA.pos = vyA.pos = vA.pos = ballA.pos;
+  vxA.axis = vec(A.v0x,0,0); vyA.axis = vec(0,A.vy,0); vA.axis = vec(A.v0x, A.vy,0);
+
+  // B
+  const sB = setBallState(B, tSel); B.x=sB.x; B.y=sB.y; B.vy=sB.vy;
+  ballB.pos = vec(B.x, B.y, 0);
+  vxB.pos = vyB.pos = vB.pos = ballB.pos;
+  vxB.axis = vec(B.v0x,0,0); vyB.axis = vec(0,B.vy,0); vB.axis = vec(B.v0x, B.vy,0);
+
+  updatePerpendiculars();
+  updateCounters();
+}
+
+/* ---------- SAMPLING HELPERS (for graphs) ---------- */
+function sampleVy(ball, tt){ return ball.v0y - g*tt; }
+function sampleAngles(ball, vy){
+  const angV = Math.abs(Math.atan2(ball.v0x, Math.abs(vy)) * 180/Math.PI);
+  const angH = Math.abs(Math.atan2(vy, ball.v0x) * 180/Math.PI);
+  return {angV, angH};
+}
+
+/* ---------- ANIMATION ---------- */
+function tick(){
+  const tPrev = t;
+  const tNext = t + DT;
+
+  // stop if both have landed or window hit
+  if ((tPrev >= A.TOF && tPrev >= B.TOF) || tPrev >= CHART_X_MAX) {
+    setTrailMode(false); // stop leaving trails
+    clearInterval(animTimer); animTimer=null;
+    return;
+  }
+
+  t = Math.min(tNext, CHART_X_MAX);
+  setStateFromTime(t);
+
+  // For each ball: add a point only up to its TOF; if crossing, add at TOF and stop that series.
+  if (tPrev < A.TOF) {
+    const tS = Math.min(t, A.TOF);
+    const vyS = sampleVy(A, tS);
+    velocityChart.data.datasets[0].data.push({ x:tS, y:A.v0x });
+    velocityChart.data.datasets[1].data.push({ x:tS, y:vyS });
+    const {angV, angH} = sampleAngles(A, vyS);
+    angleChart.data.datasets[0].data.push({ x:tS, y:angV });
+    angleChart.data.datasets[1].data.push({ x:tS, y:angH });
+  }
+  if (tPrev < B.TOF) {
+    const tS = Math.min(t, B.TOF);
+    const vyS = sampleVy(B, tS);
+    velocityChart.data.datasets[2].data.push({ x:tS, y:B.v0x });
+    velocityChart.data.datasets[3].data.push({ x:tS, y:vyS });
+    const {angV, angH} = sampleAngles(B, vyS);
+    angleChart.data.datasets[2].data.push({ x:tS, y:angV });
+    angleChart.data.datasets[3].data.push({ x:tS, y:angH });
+  }
+
+  velocityChart.update('none'); angleChart.update('none');
+}
+
+/* ---------- CHART INIT ---------- */
+function initCharts(){
+  if(velocityChart) velocityChart.destroy();
+  if(angleChart) angleChart.destroy();
+
+  velocityChart = new Chart(document.getElementById('velocityChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'A: Vx (m/s)', data:[], borderColor:'#f59e0b', borderWidth:2, pointRadius:0 },
+      { label:'A: Vy (m/s)', data:[], borderColor:'#84cc16', borderWidth:2, pointRadius:0 },
+      { label:'B: Vx (m/s)', data:[], borderColor:'#a855f7', borderWidth:2, pointRadius:0 },
+      { label:'B: Vy (m/s)', data:[], borderColor:'#22c55e', borderWidth:2, pointRadius:0 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ type:'linear', min:CHART_X_MIN, max:CHART_X_MAX, title:{display:true, text:'Time (s)', color:'#f3f4f6'}, ticks:{color:'#f3f4f6'} },
+        y:{ title:{display:true, text:'Velocity (m/s)', color:'#f3f4f6'}, min:-100, max:100, ticks:{color:'#f3f4f6'} }
+      },
+      plugins:{ legend:{ labels:{ color:'#f3f4f6' } } }
+    }
+  });
+
+  angleChart = new Chart(document.getElementById('angleChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'A: Angle vs Down Vert (°)', data:[], borderColor:'#fb923c', borderWidth:2, pointRadius:0 }, // orange
+      { label:'A: Angle vs Horizontal (°)', data:[], borderColor:'#22d3ee', borderWidth:2, pointRadius:0 }, // cyan
+      { label:'B: Angle vs Down Vert (°)', data:[], borderColor:'#c084fc', borderWidth:2, pointRadius:0 }, // purple
+      { label:'B: Angle vs Horizontal (°)', data:[], borderColor:'#60a5fa', borderWidth:2, pointRadius:0, borderDash:[6,4] } // blue dashed
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ type:'linear', min:CHART_X_MIN, max:CHART_X_MAX, title:{display:true, text:'Time (s)', color:'#f3f4f6'}, ticks:{color:'#f3f4f6'} },
+        y:{ title:{display:true, text:'Angle (°)', color:'#f3f4f6'}, min:0, max:90, ticks:{color:'#f3f4f6'} }
+      },
+      plugins:{ legend:{ labels:{ color:'#f3f4f6' } } }
+    }
+  });
+}
+
+/* ---------- WIRING ---------- */
+function reset(){
+  if(animTimer){ clearInterval(animTimer); animTimer=null; }
+  t=0;
+  initScene();
+  initCharts();
+  // empty charts, reset time inputs and ensure trails are off
+  velocityChart.data.datasets.forEach(d=>d.data=[]);
+  angleChart.data.datasets.forEach(d=>d.data=[]);
+  document.getElementById('timeSlider').value = "0";
+  document.getElementById('timeInput').value  = "0";
+  setTrailMode(false);
+  setStateFromTime(0);
+}
+
+/* Bind inputs for A */
+document.getElementById('speedSliderA').oninput = e=>{
+  A.speed = Math.min(100, parseFloat(e.target.value)||0);
+  document.getElementById('speedInputA').value = A.speed; reset();
+};
+document.getElementById('speedInputA').oninput = e=>{
+  A.speed = Math.min(100, parseFloat(e.target.value)||0);
+  document.getElementById('speedSliderA').value = A.speed; reset();
+};
+document.getElementById('angleSliderA').oninput = e=>{
+  A.angle = parseFloat(e.target.value)||0;
+  document.getElementById('angleInputA').value = A.angle; reset();
+};
+document.getElementById('angleInputA').oninput = e=>{
+  A.angle = parseFloat(e.target.value)||0;
+  document.getElementById('angleSliderA').value = A.angle; reset();
+};
+
+/* Bind inputs for B */
+document.getElementById('speedSliderB').oninput = e=>{
+  B.speed = Math.min(100, parseFloat(e.target.value)||0);
+  document.getElementById('speedInputB').value = B.speed; reset();
+};
+document.getElementById('speedInputB').oninput = e=>{
+  B.speed = Math.min(100, parseFloat(e.target.value)||0);
+  document.getElementById('speedSliderB').value = B.speed; reset();
+};
+document.getElementById('angleSliderB').oninput = e=>{
+  B.angle = parseFloat(e.target.value)||0;
+  document.getElementById('angleInputB').value = B.angle; reset();
+};
+document.getElementById('angleInputB').oninput = e=>{
+  B.angle = parseFloat(e.target.value)||0;
+  document.getElementById('angleSliderB').value = B.angle; reset();
+};
+
+/* Time scrubbing (turn trails OFF while scrubbing) */
+document.getElementById('timeSlider').oninput = e=>{
+  setTrailMode(false);
+  const ts = parseFloat(e.target.value)||0;
+  document.getElementById('timeInput').value = ts.toFixed(2);
+  setStateFromTime(ts);
+};
+document.getElementById('timeInput').oninput = e=>{
+  setTrailMode(false);
+  const ts = parseFloat(e.target.value)||0;
+  document.getElementById('timeSlider').value = ts;
+  setStateFromTime(ts);
+};
+
+/* Buttons */
+document.getElementById('btnPlay').onclick = ()=>{
+  computeBoth();
+  if(animTimer) clearInterval(animTimer);
+  // clear chart data and trails, then enable trails only for animation
+  velocityChart.data.datasets.forEach(d=>d.data=[]);
+  angleChart.data.datasets.forEach(d=>d.data=[]);
+  if (ballA) ballA.clear_trail();
+  if (ballB) ballB.clear_trail();
+  setTrailMode(true);
+  t=0; setStateFromTime(0);
+  animTimer = setInterval(tick, 20);
+};
+document.getElementById('btnPause').onclick = ()=>{
+  if(animTimer){ clearInterval(animTimer); animTimer=null; }
+  setTrailMode(false);
+};
+document.getElementById('btnReset').onclick = reset;
+
+/* Boot */
+$(document).ready(()=>{ reset(); });
+</script>
+</body>
+</html>
