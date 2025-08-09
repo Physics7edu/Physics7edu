@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body { margin:0; background:#1f2937; color:#f3f4f6; font-family:'Inter',sans-serif; height:100vh; display:flex; }
+    #leftPane { width:22rem; padding:1.2rem; background:#111827; overflow-y:auto; }
+    #rightPane { flex:1; display:flex; }
+    #sceneHolder { flex:1; }
+    #graphHolder { flex:1; display:flex; flex-direction:column; }
+    .graphBox { flex:1; border-top:1px solid #333; }
+    .divider { margin:1rem 0; padding:0.5rem; background:#374151; border-radius:6px; box-shadow:0 0 6px rgba(0,0,0,0.5); text-align:center; font-weight:bold; color:#f9fafb; }
+    canvas { background:#1f2937; }
+    input[type=range] { width:100%; }
+    input[type=number] { color:black; width:5rem; padding:0.2rem; }
+    button { background:#6366f1; color:#fff; padding:0.3rem 0.8rem; margin:0.2rem; border:none; border-radius:4px; }
+    button:hover { background:#4f46e5; }
+  </style>
+</head>
+<body>
+  <div id="leftPane">
+    <h2 class="text-lg font-bold mb-2">Vertical Motion (2 Balls)</h2>
+    <label>Ball 1 Velocity (m/s):
+      <input type="range" id="velSlider1" min="0" max="100" step="1" value="40">
+      <input type="number" id="velInput1" value="40" min="0" max="100" step="1">
+    </label>
+    <label>Ball 1 Initial Height (m):
+      <input type="range" id="heightSlider1" min="0" max="500" step="10" value="0">
+      <input type="number" id="heightInput1" value="0" min="0" max="500" step="10">
+    </label>
+
+    <div class="divider">Ball 2 Controls</div>
+
+    <label>Ball 2 Velocity (m/s):
+      <input type="range" id="velSlider2" min="0" max="100" step="1" value="60">
+      <input type="number" id="velInput2" value="60" min="0" max="100" step="1">
+    </label>
+    <label>Ball 2 Initial Height (m):
+      <input type="range" id="heightSlider2" min="0" max="500" step="10" value="0">
+      <input type="number" id="heightInput2" value="0" min="0" max="500" step="10">
+    </label>
+
+    <button id="btnPlay">Play</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset">Reset</button>
+  </div>
+
+  <div id="rightPane">
+    <div id="sceneHolder"><div id="glowscript"></div></div>
+    <div id="graphHolder">
+      <div class="graphBox"><canvas id="vtChart"></canvas></div>
+      <div class="graphBox"><canvas id="htChart"></canvas></div>
+    </div>
+  </div>
+
+<script>
+const g = 10, DT = 0.02;
+const trackHeight = 500;
+let v0_1 = 40, v1 = v0_1, y1 = 0;
+let v0_2 = 60, v2 = v0_2, y2 = 0;
+let initH1 = 0, initH2 = 0;
+let t = 0;
+let scene, ball1, ball2, animTimer = null;
+let vtChart, htChart;
+
+function initScene() {
+  const w = document.getElementById("sceneHolder").offsetWidth;
+  const h = window.innerHeight;
+  window.__context = { glowscript_container: document.getElementById("glowscript") };
+  scene = canvas({ width:w, height:h, background:color.black });
+  scene.autoscale = false;
+  scene.userzoom = false;
+  scene.userspin = false;
+
+  scene.center = vec(-80, trackHeight/2, 0);
+  scene.range = trackHeight/2 * 1.1;
+
+  const scaleX = -110;
+  curve({ pos:[vec(scaleX,0,0), vec(scaleX,trackHeight,0)], color:color.white, radius:0.05 });
+
+  for (let i = 0; i <= trackHeight; i += 10) {
+    const tickLength = (i % 50 === 0) ? 0.6 : 0.3;
+    curve({ pos:[vec(scaleX-tickLength,i,0), vec(scaleX,i,0)], color:color.white });
+    if (i % 50 === 0) {
+      label({ pos:vec(scaleX-30,i,0), text:`${i}`, box:false, height:16, color:color.white });
+    }
+  }
+
+  ball1 = sphere({ pos:vec(scaleX+1.5,initH1,0), radius:6, color:color.orange, make_trail:true });
+  ball2 = sphere({ pos:vec(scaleX+6,initH2,0), radius:6, color:color.blue, make_trail:true });
+}
+
+function initCharts(){
+  vtChart = new Chart(document.getElementById('vtChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'Ball 1', data:[], borderColor:'orange', borderWidth:2, pointRadius:0 },
+      { label:'Ball 2', data:[], borderColor:'blue', borderWidth:2, pointRadius:0 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      scales:{ x:{type:'linear', title:{display:true,text:'Time (s)',color:'#f3f4f6'}, ticks:{color:'#f3f4f6'}, min:0, max:20},
+               y:{title:{display:true,text:'Velocity (m/s)',color:'#f3f4f6'}, ticks:{color:'#f3f4f6'}, min:-100,max:100}},
+      plugins:{legend:{labels:{color:'#f3f4f6'}}} }
+  });
+
+  htChart = new Chart(document.getElementById('htChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'Ball 1', data:[], borderColor:'orange', borderWidth:2, pointRadius:0 },
+      { label:'Ball 2', data:[], borderColor:'blue', borderWidth:2, pointRadius:0 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      scales:{ x:{type:'linear', title:{display:true,text:'Time (s)',color:'#f3f4f6'}, ticks:{color:'#f3f4f6'}, min:0, max:20},
+               y:{title:{display:true,text:'Height (m)',color:'#f3f4f6'}, ticks:{color:'#f3f4f6'}, min:0,max:trackHeight}},
+      plugins:{legend:{labels:{color:'#f3f4f6'}}} }
+  });
+}
+
+function tick(){
+  let active1=true, active2=true;
+  if (y1>0 || v1>0){ v1-=g*DT; y1+=v1*DT; } else active1=false;
+  if (y2>0 || v2>0){ v2-=g*DT; y2+=v2*DT; } else active2=false;
+  if (!active1 && !active2){ pause(); return; }
+  t+=DT;
+
+  ball1.pos.y=y1;
+  ball2.pos.y=y2;
+
+  if(active1){ vtChart.data.datasets[0].data.push({x:t,y:v1}); htChart.data.datasets[0].data.push({x:t,y:y1}); }
+  if(active2){ vtChart.data.datasets[1].data.push({x:t,y:v2}); htChart.data.datasets[1].data.push({x:t,y:y2}); }
+
+  vtChart.update('none');
+  htChart.update('none');
+}
+
+function start(){ if(!animTimer) animTimer=setInterval(tick,20); }
+function pause(){ clearInterval(animTimer); animTimer=null; }
+function reset(){
+  pause(); v1=v0_1; y1=initH1; v2=v0_2; y2=initH2; t=0;
+  ball1.pos.y=initH1; ball1.clear_trail();
+  ball2.pos.y=initH2; ball2.clear_trail();
+  vtChart.destroy(); htChart.destroy();
+  initCharts();
+}
+
+document.getElementById('velSlider1').oninput=e=>{ v0_1=parseFloat(e.target.value); document.getElementById('velInput1').value=v0_1; v1=v0_1; };
+document.getElementById('velInput1').oninput=e=>{ v0_1=parseFloat(e.target.value); document.getElementById('velSlider1').value=v0_1; v1=v0_1; };
+document.getElementById('velSlider2').oninput=e=>{ v0_2=parseFloat(e.target.value); document.getElementById('velInput2').value=v0_2; v2=v0_2; };
+document.getElementById('velInput2').oninput=e=>{ v0_2=parseFloat(e.target.value); document.getElementById('velSlider2').value=v0_2; v2=v0_2; };
+
+document.getElementById('heightSlider1').oninput=e=>{ initH1=parseFloat(e.target.value); document.getElementById('heightInput1').value=initH1; y1=initH1; if(ball1) ball1.pos.y=initH1; };
+document.getElementById('heightInput1').oninput=e=>{ initH1=parseFloat(e.target.value); document.getElementById('heightSlider1').value=initH1; y1=initH1; if(ball1) ball1.pos.y=initH1; };
+
+document.getElementById('heightSlider2').oninput=e=>{ initH2=parseFloat(e.target.value); document.getElementById('heightInput2').value=initH2; y2=initH2; if(ball2) ball2.pos.y=initH2; };
+document.getElementById('heightInput2').oninput=e=>{ initH2=parseFloat(e.target.value); document.getElementById('heightSlider2').value=initH2; y2=initH2; if(ball2) ball2.pos.y=initH2; };
+
+document.getElementById('btnPlay').onclick=start;
+document.getElementById('btnPause').onclick=pause;
+document.getElementById('btnReset').onclick=reset;
+
+$(function(){ initScene(); initCharts(); });
+</script>
+</body>
+</html>
