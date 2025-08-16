@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <title>Boat & River — Relative Velocity (W = 200 m)</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#111827; color:#f3f4f6; font-family:'Inter',sans-serif; }
+    body { display:flex; height:100vh; overflow:hidden; }
+    #leftPane { width:30rem; padding:1rem; background:#111827; overflow-y:auto; display:flex; flex-direction:column; gap:0.75rem; }
+    .section-title { font-weight:800; margin-top:0.25rem; }
+    .card { background:#1f2937; padding:0.7rem; border-radius:0.5rem; box-shadow:0 0 6px rgba(0,0,0,0.3); }
+    .row { display:flex; gap:0.5rem; align-items:center; }
+    .row > * { flex:1; }
+    .label { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; font-weight:600; }
+    input[type=range]{ width:100%; }
+    input[type=number]{ width:5rem; color:black; padding:0.2rem; border-radius:0.3rem; }
+    .button-group { display:flex; gap:0.5rem; }
+    .button-group button { flex:1; background:#6366f1; color:white; padding:0.4rem; border:none; border-radius:0.3rem; font-weight:700; }
+    .button-group button:hover { background:#4f46e5; }
+    .note { font-size:.8rem; color:#cbd5e1; opacity:.9; }
+    .warn { color:#fca5a5; font-size:0.9rem; margin-top:0.25rem; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; }
+    .subcard { background:linear-gradient(135deg,#1f2937,#374151); border-radius:0.5rem; padding:0.55rem; }
+    .subcard h4 { font-weight:800; font-size:0.95rem; margin:0 0 0.35rem 0; color:#e5e7eb; }
+    .pair { display:flex; justify-content:space-between; align-items:center; font-weight:600; font-size:0.92rem; padding:0.18rem 0; }
+    .pair span:last-child { color:#facc15; font-weight:800; }
+    #sceneHolder { flex:1; height:100%; display:flex; }
+    #glowscript { flex:1; }
+  </style>
+</head>
+<body>
+  <div id="leftPane">
+    <h2 class="text-lg section-title">Boat & River — Relative Velocity</h2>
+
+    <div class="card">
+      <div class="label">River speed v<sub>r</sub> (m/s) <span class="note">(+x, downstream)</span></div>
+      <div class="row">
+        <input type="range" id="riverSlider" min="0" max="10" step="0.1" value="2.0">
+        <input type="number" id="riverInput" min="0" max="10" step="0.1" value="2.0">
+      </div>
+
+      <div class="label">Boat speed (w.r.t. water) u (m/s)</div>
+      <div class="row">
+        <input type="range" id="boatSlider" min="0" max="10" step="0.1" value="5.0">
+        <input type="number" id="boatInput" min="0" max="10" step="0.1" value="5.0">
+      </div>
+
+      <div class="label">Heading angle θ (°) <span class="note">from +y (across): + downstream, − upstream</span></div>
+      <div class="row">
+        <input type="range" id="angleSlider" min="-80" max="80" step="1" value="15">
+        <input type="number" id="angleInput" min="-80" max="80" step="1" value="15">
+      </div>
+
+      <label class="row" style="gap:0.6rem; align-items:center;">
+        <input type="checkbox" id="autoAim">
+        <span>Auto-aim for zero drift (if u ≥ v<sub>r</sub>)</span>
+      </label>
+      <div id="aimWarn" class="warn" style="display:none;">Auto-aim not possible: boat speed is less than river speed.</div>
+    </div>
+
+    <div class="card">
+      <div class="button-group">
+        <button id="btnPlay">Play</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="grid-2">
+        <div class="subcard">
+          <h4>Ground frame (lab)</h4>
+          <div class="pair"><span>Vx (m/s)</span><span id="gVx">0.00</span></div>
+          <div class="pair"><span>Vy (m/s)</span><span id="gVy">0.00</span></div>
+          <div class="pair"><span>|V| (m/s)</span><span id="gVmag">0.00</span></div>
+          <div class="pair"><span>Angle to horizontal</span><span id="gAngH">0.0°</span></div>
+          <div class="pair"><span>Angle to across (+y)</span><span id="gAngAcross">0.0°</span></div>
+          <div class="pair"><span>Time taken</span><span id="gTOF">—</span></div>
+          <div class="pair"><span>Drift (m)</span><span id="gDrift">—</span></div>
+          <div class="pair"><span>Total distance traveled</span><span id="gS">—</span></div>
+        </div>
+        <div class="subcard">
+          <h4>Water frame (boat wrt water)</h4>
+          <div class="pair"><span>u<sub>x</sub> (m/s)</span><span id="wUx">0.00</span></div>
+          <div class="pair"><span>u<sub>y</sub> (m/s)</span><span id="wUy">0.00</span></div>
+          <div class="pair"><span>|u| (m/s)</span><span id="wUmag">0.00</span></div>
+          <div class="pair"><span>Heading from across</span><span id="wHeading">0.0°</span></div>
+          <div class="pair"><span>Heading to horizontal</span><span id="wAngH">0.0°</span></div>
+        </div>
+      </div>
+      <div id="feasibleLine" class="warn" style="display:none; padding-left:0.2rem;">Boat cannot make progress across (Vy ≤ 0). Adjust θ or u.</div>
+    </div>
+  </div>
+
+  <div id="sceneHolder"><div id="glowscript"></div></div>
+
+<script>
+/* ========= Helpers ========= */
+const toRad = d => d*Math.PI/180;
+const toDeg = r => r*180/Math.PI;
+const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+
+/* ========= Fixed geometry ========= */
+const W = 200;   // river width (m) — fixed
+
+/* ========= State ========= */
+let vr = 2.0;          // river current speed (m/s), +x
+let u  = 5.0;          // boat speed relative to water (m/s)
+let thetaDeg = 15;     // heading from +y: + downstream, - upstream
+let autoAim = false;
+
+let scene, bank1, bank2, vRiverArrow;
+let boat, vWaterArrow, vGroundArrow;
+
+// Near-origin arcs & labels (merged logic)
+let arcHeading, lblHeading;  // green arc: horizontal → heading
+let arcDelta,   lblDelta;    // red arc: heading → resultant
+
+// End-of-motion markers
+let driftArrow, driftLabel, distanceLabel;
+
+let t=0, T=0, drift=0, feasible=true, animTimer=null;
+const DT = 0.02;
+
+/* ========= Physics ========= */
+function boatRelWater(theta){
+  const th = toRad(theta);
+  return { vx: u*Math.sin(th), vy: u*Math.cos(th) }; // +y across, +x downstream
+}
+function groundVel(theta){
+  const bw = boatRelWater(theta);
+  return { vx: vr + bw.vx, vy: bw.vy };
+}
+function timeToCross(theta){
+  const g = groundVel(theta);
+  if (g.vy <= 0) return { feasible:false, T:Infinity, drift:Infinity, s:Infinity };
+  const T = W / g.vy;
+  const drift = g.vx * T;
+  const vmag = Math.sqrt(g.vx*g.vx + g.vy*g.vy);
+  const s = vmag * T;
+  return { feasible:true, T, drift, s };
+}
+function zeroDriftAngle(){
+  if (u < vr || u===0) return null;
+  return -toDeg(Math.asin(vr/u));
+}
+
+/* ========= Scene ========= */
+function initScene(){
+  const container = document.getElementById("glowscript");
+  container.innerHTML = "";
+  if (typeof window.__context !== "undefined") delete window.__context;
+  window.__context = { glowscript_container: container };
+
+  const spanX = Math.max(260, Math.abs(vr)*20 + 220);
+  const spanY = W + 100;
+
+  scene = canvas({ width: container.clientWidth||780, height: container.clientHeight||540, background: color.black });
+  scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+  scene.center = vec(spanX/2, W/2, 0);
+  scene.range  = Math.max(spanX/2, spanY/2)*1.15;
+
+  // Banks
+  bank1 = curve({ pos:[vec(-spanX,0,0), vec(2*spanX,0,0)], radius:1.8, color: color.white });
+  bank2 = curve({ pos:[vec(-spanX,W,0), vec(2*spanX,W,0)], radius:1.8, color: color.white });
+
+  // Current arrow (midstream)
+  vRiverArrow = arrow({ pos: vec(20, W*0.5, 0), axis: vec(vr*15, 0, 0), color: color.cyan, shaftwidth: 2.4 });
+
+  // Boat (reduced size)
+  const baseBoat = Math.max(8, W/6);
+  const reduced  = Math.max(4, baseBoat * 0.25);
+  boat = sphere({ pos: vec(0,0,0), radius: reduced, color: color.orange, make_trail:false });
+
+  // Velocity arrows at boat
+  vWaterArrow  = arrow({ pos: boat.pos, axis: vec(0,0,0), color: color.green, shaftwidth:1.8 });
+  vGroundArrow = arrow({ pos: boat.pos, axis: vec(0,0,0), color: color.red,   shaftwidth:2.0 });
+
+  clearDriftMarkers();
+  drawNearOriginArcs(); // <-- merged arc drawing
+}
+
+/* ========= Arc helpers (merged) ========= */
+function makeArc(phiStart, phiEnd, R, col, thick){
+  const pts = [];
+  const d = phiEnd - phiStart;
+  const steps = Math.max(36, Math.floor(48*Math.abs(d)/Math.PI)+1);
+  for (let i=0; i<=steps; i++){
+    const a = phiStart + d*(i/steps);
+    pts.push(vec(R*Math.cos(a), R*Math.sin(a), 0));
+  }
+  return curve({ pos: pts, color: col, radius: thick });
+}
+
+// Mid-arc label, slight tangential shift if near another label; **no box**
+function labelOnArc(R, a1, a2, text, col, neighborMid=null){
+  const mid = (a1 + a2)/2;
+  const nx = Math.cos(mid), ny = Math.sin(mid);  // outward normal
+  const tx = -Math.sin(mid), ty = Math.cos(mid); // tangent
+  const radialGap = 8;
+  let tangShift = 0;
+  if (neighborMid !== null){
+    const sepDeg = Math.abs(toDeg(mid - neighborMid));
+    if (sepDeg < 25) tangShift = (mid > neighborMid ? +14 : -14);
+  }
+  return label({
+    pos: vec((R+radialGap)*nx + tangShift*tx, (R+radialGap)*ny + tangShift*ty, 0),
+    text, color: col, height:14, box:false
+  });
+}
+
+function drawNearOriginArcs(){
+  if (arcHeading) arcHeading.visible=false;
+  if (lblHeading) lblHeading.visible=false;
+  if (arcDelta) arcDelta.visible=false;
+  if (lblDelta) lblDelta.visible=false;
+
+  const bw = boatRelWater(thetaDeg);
+  const g  = groundVel(thetaDeg);
+
+  const phiHeadingH = Math.atan2(bw.vy, bw.vx);  // heading vs +x
+  const phiResultH  = Math.atan2(g.vy,  g.vx);   // resultant vs +x
+
+  // Green: horizontal → heading
+  const Rg = 30, tg = 0.8;
+  arcHeading = makeArc(0, phiHeadingH, Rg, vec(0.25,0.95,0.25), tg);
+  lblHeading = labelOnArc(Rg, 0, phiHeadingH, `θ = ${toDeg(phiHeadingH).toFixed(0)}°`, vec(0.70,1,0.70), (phiHeadingH+phiResultH)/2);
+
+  // Red: heading → resultant (pure red)
+  const Rr = 38, tr = 0.8;
+  arcDelta   = makeArc(phiHeadingH, phiResultH, Rr, vec(1,0,0), tr);
+  const deltaDeg = toDeg(phiResultH - phiHeadingH);
+  lblDelta   = labelOnArc(Rr, phiHeadingH, phiResultH, `Δ = ${deltaDeg.toFixed(0)}°`, vec(1,0,0), (0+phiHeadingH)/2);
+}
+
+/* ========= Drift markers ========= */
+function clearDriftMarkers(){
+  if (driftArrow) driftArrow.visible = false;
+  if (driftLabel) driftLabel.visible = false;
+  if (distanceLabel) distanceLabel.visible = false;
+  driftArrow = driftLabel = distanceLabel = null;
+}
+function showDriftAndDistance(g){
+  clearDriftMarkers();
+  const tc = timeToCross(thetaDeg);
+  if (!tc.feasible) return;
+
+  const xStart = 0;
+  const xEnd   = tc.drift;
+  const yBank  = W;
+
+  driftArrow = arrow({
+    pos: vec(xStart, yBank + 6, 0),
+    axis: vec(xEnd - xStart, 0, 0),
+    color: color.cyan,
+    shaftwidth: 2.2
+  });
+  driftLabel = label({
+    pos: vec(xStart + (xEnd - xStart)/2, yBank + 14, 0),
+    text: `Drift = ${tc.drift.toFixed(2)} m`,
+    color: color.cyan, height:16, box:true, opacity:0.25
+  });
+
+  const vmag = Math.sqrt(g.vx*g.vx + g.vy*g.vy);
+  const sTot = vmag * tc.T;
+  distanceLabel = label({
+    pos: vec(xEnd, yBank + 30, 0),
+    text: `Total path = ${sTot.toFixed(2)} m`,
+    color: color.yellow, height:16, box:true, opacity:0.25
+  });
+
+  document.getElementById('gS').textContent = sTot.toFixed(2);
+}
+
+/* ========= Counters ========= */
+function updateCounters(g){
+  const vmag = Math.sqrt(g.vx*g.vx + g.vy*g.vy);
+  const angH = toDeg(Math.atan2(g.vy, g.vx));
+  const angAcross = Math.abs(toDeg(Math.atan2(g.vx, g.vy))); // from +y
+
+  document.getElementById('gVx').textContent   = g.vx.toFixed(2);
+  document.getElementById('gVy').textContent   = g.vy.toFixed(2);
+  document.getElementById('gVmag').textContent = vmag.toFixed(2);
+  document.getElementById('gAngH').textContent = `${angH.toFixed(1)}°`;
+  document.getElementById('gAngAcross').textContent = `${angAcross.toFixed(1)}°`;
+
+  const tc = timeToCross(thetaDeg);
+  feasible = tc.feasible;
+  T = tc.T; drift = tc.drift;
+
+  if (feasible){
+    document.getElementById('gTOF').textContent = `${T.toFixed(2)} s`;
+    document.getElementById('gDrift').textContent = `${drift.toFixed(2)} m`;
+    document.getElementById('gS').textContent = (Math.sqrt(g.vx*g.vx + g.vy*g.vy) * T).toFixed(2);
+    document.getElementById('feasibleLine').style.display = 'none';
+  } else {
+    document.getElementById('gTOF').textContent = '—';
+    document.getElementById('gDrift').textContent = '—';
+    document.getElementById('gS').textContent = '—';
+    document.getElementById('feasibleLine').style.display = 'block';
+  }
+}
+
+/* ========= State from time ========= */
+function setStateFromTime(tSel){
+  t = Math.max(0, Math.min(feasible ? T : 60, tSel));
+
+  const g = groundVel(thetaDeg);
+  const x = g.vx * t;
+  const y = g.vy * t;
+
+  boat.pos = vec(x, Math.max(0, Math.min(W, y)), 0);
+  vRiverArrow.axis = vec(vr*15, 0, 0);
+
+  vWaterArrow.pos  = vGroundArrow.pos = boat.pos;
+  const bw = boatRelWater(thetaDeg);
+  vWaterArrow.axis  = vec(bw.vx*6, bw.vy*6, 0);
+  vGroundArrow.axis = vec(g.vx*6, g.vy*6, 0);
+
+  drawNearOriginArcs();  // keep arcs updated
+  updateCounters(g);
+}
+
+/* ========= Animation ========= */
+function tick(){
+  const tNext = t + DT;
+
+  if (!feasible || t >= T){
+    boat.make_trail = false;
+    clearInterval(animTimer); animTimer=null;
+
+    const g = groundVel(thetaDeg);
+    showDriftAndDistance(g);
+    return;
+  }
+
+  t = Math.min(tNext, T);
+  const g = groundVel(thetaDeg);
+  boat.pos = vec(g.vx*t, g.vy*t, 0);
+
+  vWaterArrow.pos  = vGroundArrow.pos = boat.pos;
+  const bw = boatRelWater(thetaDeg);
+  vWaterArrow.axis  = vec(bw.vx*6, bw.vy*6, 0);
+  vGroundArrow.axis = vec(g.vx*6, g.vy*6, 0);
+
+  drawNearOriginArcs();
+  updateCounters(g);
+}
+
+/* ========= Recompute & Reset ========= */
+function recomputeAndReset(){
+  if (autoAim){
+    const th0 = zeroDriftAngle();
+    const warn = document.getElementById('aimWarn');
+    if (th0 === null){
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+      thetaDeg = clamp(th0, -80, 80);
+      document.getElementById('angleSlider').value = thetaDeg;
+      document.getElementById('angleInput').value = thetaDeg;
+    }
+  } else {
+    document.getElementById('aimWarn').style.display = 'none';
+  }
+
+  initScene();
+  t = 0;
+  if (boat) { boat.clear_trail(); boat.make_trail = false; }
+
+  const g = groundVel(thetaDeg);
+  updateCounters(g);
+  setStateFromTime(0);
+}
+
+/* ========= Wiring ========= */
+function hookControls(){
+  const sync = (slider, input, onChange) => {
+    slider.oninput = e => { input.value = e.target.value; onChange(parseFloat(e.target.value)); };
+    input.oninput  = e => { slider.value = e.target.value; onChange(parseFloat(e.target.value)); };
+  };
+
+  sync(document.getElementById('riverSlider'), document.getElementById('riverInput'),
+      v=>{ vr = clamp(v,0,10);  recomputeAndReset(); });
+  sync(document.getElementById('boatSlider'),  document.getElementById('boatInput'),
+      v=>{ u  = clamp(v,0,10);  recomputeAndReset(); });
+  sync(document.getElementById('angleSlider'), document.getElementById('angleInput'),
+      v=>{ thetaDeg = clamp(v,-80,80); recomputeAndReset(); });
+
+  document.getElementById('autoAim').onchange = e=>{
+    autoAim = e.target.checked;
+    recomputeAndReset();
+  };
+
+  document.getElementById('btnPlay').onclick = ()=>{
+    if (animTimer) clearInterval(animTimer);
+    t = 0;
+    clearDriftMarkers();
+    boat.clear_trail();
+    boat.make_trail = true;
+    setStateFromTime(0);
+    animTimer = setInterval(tick, 20);
+  };
+  document.getElementById('btnPause').onclick = ()=>{
+    if (animTimer){ clearInterval(animTimer); animTimer=null; }
+    boat.make_trail = false;
+  };
+  document.getElementById('btnReset').onclick = ()=>{
+    if (animTimer){ clearInterval(animTimer); animTimer=null; }
+    recomputeAndReset();
+  };
+}
+
+/* ========= Boot ========= */
+$(document).ready(()=>{
+  initScene();
+  hookControls();
+  recomputeAndReset();
+});
+</script>
+</body>
+</html>

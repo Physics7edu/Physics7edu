@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rain Apparent Angle — Vector Diagram (Labeled)</title>
+
+  <!-- GlowScript / VPython -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <!-- UI -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#0f172a; color:#e5e7eb; font-family:'Inter',sans-serif; }
+    body { display:flex; height:100vh; overflow:hidden; }
+    #leftPane { width:26rem; padding:1rem; background:#111827; border-right:1px solid #1f2937; overflow:auto; }
+    .card { background:#1f2937; padding:0.9rem; border-radius:0.7rem; box-shadow:0 0 6px rgba(0,0,0,.35); margin-bottom:0.8rem; }
+    .label { font-weight:800; margin-bottom:0.3rem; display:flex; justify-content:space-between; }
+    .row { display:flex; gap:0.6rem; align-items:center; }
+    .row>*{ flex:1; }
+    input[type=range]{ width:100%; }
+    input[type=number]{ width:6rem; color:#111827; padding:0.25rem; border-radius:0.35rem; }
+    .btn { background:#2563eb; padding:.55rem .8rem; border:none; border-radius:.5rem; font-weight:800; color:#fff; }
+    .btn:hover { background:#1d4ed8; }
+    .btn.gray { background:#475569; }
+    .btn.gray:hover { background:#334155; }
+    .pair { display:flex; justify-content:space-between; padding:.15rem 0; }
+    .pair span:last-child { color:#facc15; font-weight:800; }
+    #sceneHolder { flex:1; display:flex; }
+    #glowscript { flex:1; }
+  </style>
+</head>
+<body>
+  <div id="leftPane">
+    <h1 class="text-lg font-extrabold mb-2">Rain Apparent Angle</h1>
+
+    <div class="card">
+      <div class="label">Rain speed v<sub>d</sub> (m/s) <span class="text-gray-300 text-sm">down</span></div>
+      <div class="row">
+        <input id="vdSlider" type="range" min="0" max="20" step="0.1" value="8">
+        <input id="vdInput"  type="number" min="0" max="20" step="0.1" value="8">
+      </div>
+
+      <div class="label mt-3">Walker speed u (m/s) <span class="text-gray-300 text-sm">−20 … +20</span></div>
+      <div class="row">
+        <input id="uSlider" type="range" min="-20" max="20" step="0.1" value="6">
+        <input id="uInput"  type="number" min="-20" max="20" step="0.1" value="6">
+      </div>
+
+      <div class="row mt-3">
+        <button id="btnPlay"  class="btn">Play</button>
+        <button id="btnPause" class="btn gray">Pause</button>
+        <button id="btnReset" class="btn gray">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pair"><span>Apparent angle θ</span><span id="thetaLbl">0.0°</span></div>
+      <div class="pair"><span>v<sub>rel</sub> = (−u, −v<sub>d</sub>)</span><span id="relLbl">(—, —)</span></div>
+    </div>
+
+    <p id="bootWarn" class="text-sm text-red-300" style="display:none;">Loading 3D… if this persists, a network filter may be blocking glowscript.org.</p>
+  </div>
+
+  <div id="sceneHolder"><div id="glowscript"></div></div>
+
+<script>
+(function(){
+  // ------- DOM helpers -------
+  const $ = id => document.getElementById(id);
+  const vdS=$('vdSlider'), vdI=$('vdInput');
+  const uS=$('uSlider'),  uI=$('uInput');
+  const btnPlay=$('btnPlay'), btnPause=$('btnPause'), btnReset=$('btnReset');
+  const thetaLbl=$('thetaLbl'), relLbl=$('relLbl'), bootWarn=$('bootWarn');
+
+  // ------- State -------
+  let vd = 8;   // rain speed downward (m/s)
+  let u  = 6;   // walker speed +x (m/s)
+  const WORLD_X=900, WORLD_Y=520;
+  const DT=0.02; let timer=null;
+
+  // GlowScript objects
+  let scene, ground, walkerBody, walkerHead;
+  let rainSegments=[];
+  let rainVecArrow, minusUArrow, appArrow;
+  let rainLabel, minusULabel, appLabel;
+
+  // ------- Math helpers -------
+  const toRad=d=>d*Math.PI/180, toDeg=r=>r*180/Math.PI;
+
+  // ground rain (vertical down)
+  function gRain(){ return { vx:0, vy:-vd }; }
+  // apparent (relative to walker)
+  function relRain(){ return { vx:-u, vy:-vd }; }
+  function angleFromVerticalDeg(v){ // 0° = straight down, positive toward +x
+    const ax = v.vx, ay = -v.vy; // compare against +y; v.vy negative
+    const angFromY = Math.atan2(ax, ay); // radians
+    return toDeg(angFromY);
+  }
+
+  // ------- Scene -------
+  function initScene(){
+    const container = document.getElementById('glowscript');
+    container.innerHTML='';
+    if (typeof window.__context !== 'undefined') delete window.__context;
+    window.__context = { glowscript_container: container };
+
+    scene = canvas({ width: container.clientWidth||1024, height: container.clientHeight||620, background: color.black });
+    scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+    scene.center = vec(WORLD_X/2, WORLD_Y/2, 0);
+    scene.range  = Math.max(WORLD_X/2, WORLD_Y/2)*1.12;
+
+    // Ground
+    ground = box({ pos: vec(WORLD_X/2, 20, 0), size: vec(WORLD_X*1.2, 8, 0.1), color: color.gray(0.5) });
+
+    // Walker (stick figure)
+    const x0 = WORLD_X*0.62, y0 = 20;
+    walkerBody = cylinder({ pos: vec(x0, y0, 0), axis: vec(0, 60, 0), radius: 4, color: color.white });
+    walkerHead = sphere({ pos: walkerBody.pos.add(vec(0, walkerBody.axis.y+8, 0)), radius: 7, color: color.white });
+
+    // Vector diagram origin (top-left)
+    const vecOrigin = vec(120, WORLD_Y-120, 0);
+
+    // Diagram arrows (thick)
+    rainVecArrow = arrow({ pos: vecOrigin, axis: vec(0,0,0), color: color.yellow, shaftwidth: 8 });
+    minusUArrow  = arrow({ pos: vecOrigin, axis: vec(0,0,0), color: color.green,  shaftwidth: 8 });
+    appArrow     = arrow({ pos: vecOrigin, axis: vec(0,0,0), color: vec(0.3,0.8,1), shaftwidth: 8 });
+
+    // Labels near the arrow tips (no boxes)
+    rainLabel  = label({ pos: vecOrigin, text: 'Rv',    color: color.yellow, height:14, box:false });
+    minusULabel= label({ pos: vecOrigin, text: '−u', color: color.green,  height:14, box:false });
+    appLabel   = label({ pos: vecOrigin, text: 'Av', color: vec(0.3,0.8,1), height:14, box:false });
+
+    buildRainField();
+    updateAll();
+  }
+
+  // Long broken arrow-like rain field aligned with apparent v_rel
+  function buildRainField(){
+    for (const s of rainSegments){ if (s) s.visible=false; }
+    rainSegments.length = 0;
+
+    const COLS=26, ROWS=12, SPX=34, SPY=34;
+    const v = relRain();
+    const dir = vec(v.vx, v.vy, 0);
+    const mag = Math.sqrt(dir.x*dir.x + dir.y*dir.y) || 1;
+    const udir = dir.multiply(1/mag);
+    const segLen = 28; // long
+
+    for (let c=0;c<COLS;c++){
+      for (let r=0;r<ROWS;r++){
+        const x = 90 + c*SPX + (r%2)*SPX*0.5;
+        const y = 120 + r*SPY;
+        const p0 = vec(x,y,0), p1 = p0.add(udir.multiply(segLen));
+        const seg = curve({ pos:[p0,p1], color: vec(1,0.25,0.25), radius:1.4 });
+        rainSegments.push(seg);
+      }
+    }
+  }
+
+  // Move walker and rain segments
+  function step(){
+    if (!walkerBody) return;
+
+    // Move walker in +x with speed u; wrap to stay in view
+    const dx = u*DT;
+    walkerBody.pos = walkerBody.pos.add(vec(dx,0,0));
+    walkerHead.pos = walkerHead.pos.add(vec(dx,0,0));
+    if (walkerBody.pos.x > WORLD_X+40){ walkerBody.pos.x -= WORLD_X+80; walkerHead.pos.x -= WORLD_X+80; }
+    if (walkerBody.pos.x < -40){        walkerBody.pos.x += WORLD_X+80; walkerHead.pos.x += WORLD_X+80; }
+
+    // Drift rain segments along apparent vector so the field looks coherent
+    const rv = relRain();
+    const move = vec(rv.vx, rv.vy, 0).multiply(DT);
+    for (const seg of rainSegments){
+      const p0 = seg.point(0).pos.add(move);
+      const p1 = seg.point(1).pos.add(move);
+      seg.modify(0, p0); seg.modify(1, p1);
+
+      // recycle when off-screen
+      if (Math.max(p0.y,p1.y) < 0){
+        const v = relRain();
+        const dir = vec(v.vx, v.vy, 0);
+        const mag = Math.sqrt(dir.x*dir.x + dir.y*dir.y) || 1;
+        const udir = dir.multiply(1/mag);
+        const nx = (p0.x % (WORLD_X+120) + (WORLD_X+120)) % (WORLD_X+120);
+        const ny = WORLD_Y + 40;
+        const np0 = vec(nx, ny, 0), np1 = np0.add(udir.multiply(28));
+        seg.modify(0, np0); seg.modify(1, np1);
+      }
+    }
+  }
+
+  function play(){ if (timer) return; timer = setInterval(()=>{ step(); }, 20); }
+  function pause(){ if (!timer) return; clearInterval(timer); timer=null; }
+  function reset(){
+    pause();
+    vd = 0; u = 0;
+    vdS.value=vdI.value=vd.toFixed(1);
+    uS.value=uI.value=u.toFixed(1);
+    initScene();
+  }
+
+  // Update diagram arrows, labels, numeric readouts
+  function updateAll(){
+    const vecOrigin = rainVecArrow.pos;
+    const g = gRain();
+    const r = relRain();
+
+    // scaling for on-screen arrows
+    const k = 6;
+    rainVecArrow.axis = vec(g.vx*k, g.vy*k, 0);
+    minusUArrow.axis  = vec((-u)*k, 0, 0);
+    appArrow.axis     = vec(r.vx*k, r.vy*k, 0);
+
+    // place labels near tips (slightly past tip for readability)
+    const tip = (arrowObj)=> arrowObj.pos.add(arrowObj.axis.multiply(1.06));
+    rainLabel.pos   = tip(rainVecArrow);
+    minusULabel.pos = tip(minusUArrow);
+    appLabel.pos    = tip(appArrow);
+
+    // apparent angle from vertical
+    const theta = angleFromVerticalDeg(r);
+    thetaLbl.textContent = `${theta.toFixed(1)}°`;
+    relLbl.textContent   = `(${r.vx.toFixed(1)}, ${r.vy.toFixed(1)})`;
+  }
+
+  // ------- Wiring -------
+  function syncPair(slider, input, cb){
+    slider.addEventListener('input', e=>{ input.value=e.target.value; cb(parseFloat(e.target.value)); });
+    input.addEventListener('input',  e=>{ slider.value=e.target.value; cb(parseFloat(e.target.value)); });
+  }
+
+  syncPair(vdS, vdI, v=>{
+    vd = Math.max(0, Math.min(20, isNaN(v)?0:v));
+    buildRainField();
+    updateAll();
+  });
+
+  syncPair(uS, uI, v=>{
+    u = Math.max(-20, Math.min(20, isNaN(v)?0:v));
+    updateAll();
+  });
+
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', pause);
+  btnReset.addEventListener('click', reset);
+
+  // Robust boot (in case scripts load slowly)
+  let bootTries=0;
+  function safeBoot(){
+    try{
+      if (typeof window.canvas==='function' && typeof window.vec==='function'){
+        bootWarn.style.display='none';
+        initScene();
+        play();
+        return;
+      }
+    }catch(e){}
+    bootTries++;
+    bootWarn.style.display='block';
+    if (bootTries<200) setTimeout(safeBoot, 30);
+    else bootWarn.textContent='Failed to load VPython. Check network blockers and reload.';
+  }
+  window.addEventListener('load', safeBoot);
+})();
+</script>
+</body>
+</html>

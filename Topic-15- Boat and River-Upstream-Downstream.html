@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Boat in a Stream — 1D (Fixed Width & Length, Linear Flow Arrow)</title>
+
+  <!-- GlowScript / VPython -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <!-- UI -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body { background:#0f172a; color:#e5e7eb; margin:0; }
+    .wrap { display:flex; height:100vh; }
+    .left { width:28rem; padding:1rem; background:#111827; overflow:auto; }
+    .right { flex:1; display:flex; flex-direction:column; }
+    .card { background:#1f2937; border-radius:0.75rem; padding:1rem; box-shadow:0 6px 16px rgba(0,0,0,.35); margin-bottom:0.75rem; }
+    .row { display:flex; gap:.75rem; align-items:center; }
+    .row > * { flex:1; }
+    .pair { display:flex; justify-content:space-between; padding:0.25rem 0; font-weight:700; }
+    .pair span:last-child { color:#facc15; }
+    .badge { display:inline-block; font-weight:800; padding:.2rem .45rem; border-radius:.4rem; background:#0b3b2d; color:#86efac; }
+    .badge.neg { background:#3b0b0b; color:#fecaca; }
+    .warn { color:#fca5a5; font-weight:700; }
+    input[type="number"] { color:#111827; }
+    #sceneHolder { flex:1; display:flex; }
+    #glowscript { flex:1; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <h1 class="text-xl font-extrabold mb-2">Boat in a Stream — 1D</h1>
+
+    <div class="card space-y-3">
+      <div class="row">
+        <div>
+          <label class="block font-bold mb-1">Boat speed u (m/s)</label>
+          <input id="u" type="number" min="0" step="0.1" value="5.0" class="w-full p-2 rounded" />
+        </div>
+        <div>
+          <label class="block font-bold mb-1">Stream speed v<sub>r</sub> (m/s)</label>
+          <input id="vr" type="number" min="0" step="0.1" value="2.0" class="w-full p-2 rounded" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold mb-1">Direction (exclusive)</label>
+        <div class="flex items-center gap-6">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" id="chkDown" checked>
+            <span>Downstream (A → B)</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" id="chkUp">
+            <span>Upstream (B → A)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button id="btnCalc" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold">Calculate</button>
+        <button id="btnPlay" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold">Play</button>
+        <button id="btnPause" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold">Pause</button>
+        <button id="btnReset" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold">Reset</button>
+      </div>
+    </div>
+
+    <div class="card space-y-2">
+      <div class="pair"><span>Selected case</span><span id="caseLbl">Downstream</span></div>
+      <div class="pair"><span>Ground speed v<sub>g</sub></span><span id="v_g">—</span></div>
+      <div class="pair"><span>Time A→B</span><span id="t_ab">—</span></div>
+      <div class="pair"><span>Effect of current</span>
+        <span id="deltaLbl"><span class="badge">+ v<sub>r</sub></span></span>
+      </div>
+      <div id="warn" class="warn" style="display:none;">No progress upstream (u ≤ v<sub>r</sub>).</div>
+      <p class="text-sm text-gray-300">
+        River width fixed at <b>500 m</b>. Track length fixed at <b>1000 m</b> (A↔B).
+      </p>
+    </div>
+  </div>
+
+  <div class="right">
+    <div id="sceneHolder"><div id="glowscript"></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const u = $('u'), vr = $('vr');
+  const chkDown = $('chkDown'), chkUp = $('chkUp');
+  const caseLbl = $('caseLbl'), v_g = $('v_g'), t_ab = $('t_ab'), warn = $('warn'), deltaLbl = $('deltaLbl');
+  const btnCalc = $('btnCalc'), btnPlay = $('btnPlay'), btnPause = $('btnPause'), btnReset = $('btnReset');
+
+  const W = 500, D = 1000;
+  const FLOW_BASE  = 120, FLOW_SCALE = 18;
+
+  let U=5, VR=2;
+  let mode='down';
+  let vGround=0, T=Infinity, feasible=true;
+  const DT = 0.02;
+  let animTimer = null;
+  let t = 0;
+
+  function fmt(v, unit='m/s'){
+    if (!isFinite(v)) return '—';
+    return (Math.abs(v) >= 1000 ? v.toFixed(0) : v.toFixed(2)) + (unit?` ${unit}`:'');
+  }
+
+  function compute(){
+    U  = Math.max(0, parseFloat(u.value)||0);
+    VR = Math.max(0, parseFloat(vr.value)||0);
+    mode = chkUp.checked ? 'up' : 'down';
+    caseLbl.textContent = mode==='down' ? 'Downstream' : 'Upstream';
+
+    if (mode==='down'){ vGround = U + VR; feasible = vGround > 0; }
+    else { vGround = U - VR; feasible = vGround > 0; }
+
+    if (feasible){
+      T = D / Math.abs(vGround);
+      v_g.textContent  = fmt(vGround) + (mode==='up' ? ' (←)' : ' (→)');
+      t_ab.textContent = fmt(T, 's');
+      warn.style.display = 'none';
+    } else {
+      T = Infinity;
+      v_g.textContent  = mode==='up' ? '≤ 0' : '0';
+      t_ab.textContent = '—';
+      warn.style.display = 'block';
+    }
+
+    deltaLbl.innerHTML = (mode==='down')
+      ? '<span class="badge">+ v<sub>r</sub></span>'
+      : '<span class="badge neg">− v<sub>r</sub></span>';
+
+    initScene();
+    placeBoatStart();
+    updateVectorArrows();
+  }
+
+  let scene, bank1, bank2, midLine, startMark, endMark, labelA, labelB;
+  let flowArrow, flowLabel, boat, vGroundArrow, vGroundLabel;
+
+  function initScene(){
+    const container = document.getElementById("glowscript");
+    container.innerHTML = "";
+    if (typeof window.__context !== "undefined") delete window.__context;
+    window.__context = { glowscript_container: container };
+
+    const XMAX = D * 1.20;
+    scene = canvas({ width: container.clientWidth||900, height: container.clientHeight||560, background: color.black });
+    scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+    scene.center = vec(D/2, W/2, 0);
+    scene.range  = Math.max(D/2, W/2)*1.15;
+
+    bank1 = curve({ pos:[vec(-XMAX,0,0), vec(2*XMAX,0,0)], radius:2.2, color: color.white });
+    bank2 = curve({ pos:[vec(-XMAX,W,0), vec(2*XMAX,W,0)], radius:2.2, color: color.white });
+    midLine = curve({ pos:[vec(0, W/2, 0), vec(D, W/2, 0)], radius:1.2, color: color.gray(0.55) });
+
+    const y0 = W/2, rTick = 1.4;
+    if (mode==='down'){
+      startMark = curve({ pos:[vec(0, y0-14, 0), vec(0, y0+14, 0)], color:color.white, radius:rTick });
+      endMark   = curve({ pos:[vec(D, y0-14, 0), vec(D, y0+14, 0)], color:color.white, radius:rTick });
+      labelA = label({ pos:vec(0, y0+24, 0), text:'A', height:18, color:color.white, box:false });
+      labelB = label({ pos:vec(D, y0+24, 0), text:'B', height:18, color:color.white, box:false });
+    } else {
+      startMark = curve({ pos:[vec(D, y0-14, 0), vec(D, y0+14, 0)], color:color.white, radius:rTick });
+      endMark   = curve({ pos:[vec(0, y0-14, 0), vec(0, y0+14, 0)], color:color.white, radius:rTick });
+      labelA = label({ pos:vec(D, y0+24, 0), text:'A', height:18, color:color.white, box:false });
+      labelB = label({ pos:vec(0, y0+24, 0), text:'B', height:18, color:color.white, box:false });
+    }
+
+    const flowLen = FLOW_BASE + FLOW_SCALE * VR;
+    flowArrow = arrow({ pos: vec(40, W*0.82, 0), axis: vec(flowLen, 0, 0), color: color.cyan, shaftwidth: 6 });
+    flowLabel = label({ pos: vec(40 + (flowLen + 18), W*0.82, 0), text: `Flow →  (${VR.toFixed(1)} m/s)`, color: color.cyan, height: 16, box:false });
+
+    const rBoat = Math.max(16, W/8);
+    boat = sphere({ pos: vec(0, y0, 0), radius: rBoat, color: mode==='down' ? color.green : color.blue, make_trail: false });
+
+    vGroundArrow = arrow({ pos: boat.pos, axis: vec(0,0,0), color: color.red, shaftwidth: 4 });
+    vGroundLabel = label({ pos: boat.pos, text:'', height:14, color: color.red, box:false, yoffset: 18 });
+  }
+
+  function placeBoatStart(){
+    const y0 = W/2;
+    if (mode==='down') boat.pos = vec(0, y0, 0);
+    else               boat.pos = vec(D, y0, 0);
+    vGroundArrow.pos = boat.pos;
+    vGroundLabel.pos = vec(boat.pos.x, boat.pos.y, 0);
+  }
+
+  function updateVectorArrows(){
+    const SPEED_SCALE = 12;
+    const len = Math.max(0, Math.abs(vGround) * SPEED_SCALE);
+    const dir = (mode==='down') ? +1 : -1;
+    vGroundArrow.pos  = boat.pos;
+    vGroundArrow.axis = vec(dir * len, 0, 0);
+    vGroundLabel.pos  = vec(boat.pos.x + (dir>0 ? +20 : -20), boat.pos.y + 18, 0);
+    vGroundLabel.text = `v₍g₎=${Math.abs(vGround).toFixed(2)} m/s ${dir>0?'→':'←'}`;
+  }
+
+  function setState(tNow){
+    if (!feasible){ placeBoatStart(); updateVectorArrows(); return; }
+    const s = Math.min(D, Math.abs(vGround) * tNow);
+    const y0 = W/2;
+    if (mode==='down') boat.pos = vec(0 + s, y0, 0);
+    else               boat.pos = vec(D - s, y0, 0);
+    vGroundArrow.pos = boat.pos;
+    vGroundLabel.pos = vec(boat.pos.x, boat.pos.y, 0);
+    updateVectorArrows();
+  }
+
+  function play(){
+    stopAnim();
+    if (!feasible) return;
+    t = 0;
+    placeBoatStart();
+    updateVectorArrows();
+    boat.clear_trail();
+    boat.make_trail = true;
+
+    animTimer = setInterval(()=>{
+      t += DT;
+      if (t >= T){
+        setState(T);
+        stopAnim();
+        boat.make_trail = false;
+        return;
+      }
+      setState(t);
+    }, 20);
+  }
+
+  function stopAnim(){ if (animTimer){ clearInterval(animTimer); animTimer=null; } }
+  function reset(){ stopAnim(); compute(); }
+
+  [u,vr].forEach(el => el.addEventListener('input', compute));
+  chkDown.onchange = ()=>{ if (chkDown.checked) chkUp.checked = false; if (!chkDown.checked && !chkUp.checked) chkDown.checked = true; compute(); };
+  chkUp.onchange = ()=>{ if (chkUp.checked) chkDown.checked = false; if (!chkDown.checked && !chkUp.checked) chkDown.checked = true; compute(); };
+
+  btnCalc.addEventListener('click', compute);
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', ()=>{ stopAnim(); boat.make_trail=false; });
+  btnReset.addEventListener('click', reset);
+
+  compute();
+})();
+</script>
+</body>
+</html>

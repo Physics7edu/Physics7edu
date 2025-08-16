@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#1f2937; color:#f3f4f6; font-family:'Inter',sans-serif; }
+    body { display:flex; height:100vh; overflow:hidden; }
+    #leftPane { width:26rem; padding:1rem; background:#111827; overflow-y:auto; display:flex; flex-direction:column; gap:0.75rem; }
+    .section-title { font-weight:800; margin-top:0.25rem; }
+    .card { background:#1f2937; padding:0.7rem; border-radius:0.5rem; box-shadow:0 0 6px rgba(0,0,0,0.3); }
+    .row { display:flex; gap:0.5rem; align-items:center; }
+    .row > * { flex:1; }
+    .label { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; font-weight:600; }
+    input[type=range]{ width:100%; }
+    input[type=number]{ width:5rem; color:black; padding:0.2rem; border-radius:0.3rem; }
+    .button-group { display:flex; gap:0.5rem; }
+    .button-group button { flex:1; background:#6366f1; color:white; padding:0.4rem; border:none; border-radius:0.3rem; font-weight:700; }
+    .button-group button:hover { background:#4f46e5; }
+    .counters { display:grid; grid-template-columns:1fr; gap:0.5rem; }
+    .counter { background:linear-gradient(135deg,#1f2937,#374151); padding:0.45rem 0.6rem; border-radius:0.5rem; box-shadow:0 2px 6px rgba(0,0,0,.5); display:flex; justify-content:space-between; align-items:center; font-weight:600; font-size:0.95rem; }
+    #rightPane { flex:1; display:flex; flex-direction:row; height:100%; }
+    #sceneHolder { flex:1; height:100%; display:flex; }
+    #glowscript { flex:1; }
+    #graphHolder { flex:1; display:flex; flex-direction:column; height:100%; }
+    .graphBox { flex:1; border-top:1px solid #333; }
+    #graphHolder canvas { width:100% !important; height:100% !important; }
+    .note { font-size:.8rem; color:#cbd5e1; opacity:.9; }
+    .checkrow { display:flex; align-items:center; gap:0.5rem; margin-top:0.3rem; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="leftPane">
+    <h2 class="text-lg section-title">Projectile on an Inclined Plane — One Ball</h2>
+
+    <div class="card">
+      <div class="label">Speed (m/s)</div>
+      <div class="row">
+        <input type="range" id="speedSlider" min="0" max="100" step="1" value="80">
+        <input type="number" id="speedInput" min="0" max="100" step="1" value="80">
+      </div>
+      <div class="label">Ball Angle θ (°) <span class="note">from the plane</span></div>
+      <div class="row">
+        <input type="range" id="angleSlider" min="0" max="90" step="1" value="30">
+        <input type="number" id="angleInput" min="0" max="90" step="1" value="30">
+      </div>
+      <div class="label">Plane Angle α (°)</div>
+      <div class="row">
+        <input type="range" id="planeSlider" min="0" max="60" step="1" value="20">
+        <input type="number" id="planeInput" min="0" max="60" step="1" value="20">
+      </div>
+      <div class="checkrow">
+        <input type="checkbox" id="chkApexDrop">
+        <label for="chkApexDrop">Show perpendicular from max height to ground (after flight)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Select Time (s) <span class="note" id="tofNote"></span></div>
+      <div class="row">
+        <input type="range" id="timeSlider" min="0" max="20" step="0.01" value="0">
+        <input type="number" id="timeInput" min="0" max="20" step="0.01" value="0">
+      </div>
+      <div class="button-group" style="margin-top:0.4rem;">
+        <button id="btnPlay">Play</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </div>
+
+    <div class="counters">
+      <div class="card"><div class="counter"><span>V∥ (along plane)</span><span id="Vpar">0.0</span></div></div>
+      <div class="card"><div class="counter"><span>V⊥ (perp. to plane)</span><span id="Vperp">0.0</span></div></div>
+      <div class="card"><div class="counter"><span>Angle vs Horizontal</span><span id="AngH">0.0</span></div></div>
+      <div class="card"><div class="counter"><span>Angle vs Down Vertical</span><span id="AngV">0.0</span></div></div>
+      <div class="card"><div class="counter"><span>Range (x at impact)</span><span id="RangeX">0.0</span></div></div>
+      <div class="card"><div class="counter"><span>Distance along plane</span><span id="RangeS">0.0</span></div></div>
+      <div class="card"><div class="counter"><span>Max height above plane</span><span id="HeightMax">0.0</span></div></div>
+    </div>
+  </div>
+
+  <div id="rightPane">
+    <div id="sceneHolder"><div id="glowscript"></div></div>
+    <div id="graphHolder">
+      <div class="graphBox"><canvas id="velocityChart"></canvas></div>
+      <div class="graphBox"><canvas id="angleChart"></canvas></div>
+    </div>
+  </div>
+
+<script>
+/* ---------- CONSTANTS ---------- */
+const TRACK_FONT_PX = 14;
+const V_TICK = 50;
+const LEFT_MARGIN_FRAC = 0.10;
+const CHART_X_MIN = 0, CHART_X_MAX = 20;
+const g = 10, DT = 0.02;
+
+/* Visual thickness (world units) */
+const PLANE_RADIUS = 2.0;
+const PERP_PLANE_RADIUS = 1.5;
+const PERP_Y_RADIUS = 1.2;
+const APEX_DROP_RADIUS = 0.6;
+
+/* ---------- STATE ---------- */
+let speed=80, thetaDeg=30, alphaDeg=20; // θ from plane
+let v0x=0, v0y=0, TOF=0, xHit=0, yHit=0, sAlong=0, H_plane=0;
+let t=0, scene, animTimer=null;
+let x_peak=0, y_peak=0;  // peak wrt horizontal ground
+
+/* VPython objects */
+let ball, vxArrow, vyArrow, vArrow;
+let planeCurve, angleArc, angleArcLabel;
+let perpPlaneLine, perpPlaneLabel;
+let perpYLine,    perpYLabel;
+let apexDropLine=null;
+
+/* Charts */
+let velocityChart, angleChart;
+
+/* ---------- HELPERS ---------- */
+const toRad = d => d*Math.PI/180;
+const toDeg = r => r*180/Math.PI;
+const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+function niceStep(rangeTarget){
+  const steps = [1,2,5,10,20,50,100,200,500,1000,2000,5000];
+  for (const s of steps) if (rangeTarget/s <= 12) return s;
+  return steps[steps.length-1];
+}
+// Projection of (x,y) onto line y = m x
+function footOnPlane(x, y, m){
+  const denom = 1 + m*m;
+  const s = (x + m*y) / denom;
+  return { xf: s, yf: m*s };
+}
+function distToPlane(x,y,m){
+  return Math.abs(y - m*x) / Math.sqrt(1 + m*m);
+}
+function vAlongPerp(vx, vy, alphaRad){
+  const c = Math.cos(alphaRad), s = Math.sin(alphaRad);
+  const vpar  =  vx*c + vy*s;
+  const vperp = -vx*s + vy*c;
+  return { vpar, vperp };
+}
+
+/* ---------- PHYSICS ON AN INCLINE ---------- */
+function computeParams(){
+  thetaDeg = clamp(thetaDeg, 0, 90);
+  alphaDeg = clamp(alphaDeg, 0, 60);
+  speed    = clamp(speed, 0, 100);
+
+  const th_plane = toRad(thetaDeg);
+  const al       = toRad(alphaDeg);
+  const th_world = al + th_plane;
+
+  v0x = speed*Math.cos(th_world);
+  v0y = speed*Math.sin(th_world);
+
+  if (Math.sin(th_plane) > 0 && Math.cos(al) > 1e-12) {
+    TOF = (2 * speed * Math.sin(th_plane)) / (g * Math.cos(al));
+    xHit = v0x * TOF;
+    yHit = xHit * Math.tan(al);
+    sAlong = xHit / Math.cos(al);
+  } else {
+    TOF = 0; xHit = 0; yHit = 0; sAlong = 0;
+  }
+
+  // Max ⟂ height above plane
+  const m = Math.tan(al);
+  const t_star = (v0y - m*v0x) / g;
+  let H_perp = 0;
+  if (t_star > 0) H_perp = ((v0y - m*v0x)**2) / (2 * g * Math.sqrt(1 + m*m));
+  H_plane = H_perp;
+
+  // Horizontal (ground) peak
+  const t_apex = v0y / g;
+  const t_peak = Math.max(0, Math.min(t_apex, TOF));
+  x_peak = v0x * t_peak;
+  y_peak = v0y * t_peak - 0.5 * g * t_peak * t_peak;
+
+  document.getElementById('tofNote').textContent = `(TOF ≈ ${TOF.toFixed(2)} s; needs θ>0)`;
+  document.getElementById('RangeX').textContent = xHit.toFixed(1);
+  document.getElementById('RangeS').textContent = sAlong.toFixed(1);
+  document.getElementById('HeightMax').textContent = H_plane.toFixed(1);
+}
+
+/* ---------- TRAIL TOGGLING ---------- */
+function setTrailMode(on){ if (ball) ball.make_trail = on; }
+
+/* ---------- SCENE ---------- */
+function initScene(){
+  const container = document.getElementById("glowscript");
+  container.innerHTML = "";
+  if(typeof window.__context !== "undefined") delete window.__context;
+  window.__context = { glowscript_container: container };
+
+  computeParams();
+
+  const prelimX = (TOF > 0 ? xHit : Math.max(100, (speed*speed)/g)) * 1.2;
+  const al = toRad(alphaDeg);
+  const m = Math.tan(al);
+  const planeYpos = m * prelimX;
+  const planeYneg = m * (-prelimX);
+
+  const prelimYmax = Math.max(planeYpos, yHit, y_peak);
+  const prelimYmin = Math.min(planeYneg, 0);
+  const YMAX = Math.ceil((Math.max(prelimYmax, -prelimYmin) + 30) / V_TICK) * V_TICK;
+
+  const XMAX = prelimX;
+  const leftMargin = LEFT_MARGIN_FRAC * Math.max(XMAX, YMAX);
+
+  scene = canvas({ width: container.clientWidth || 600, height: container.clientHeight || 400, background: color.black });
+  scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+
+  const cx = (XMAX + leftMargin)/2;
+  const cy = YMAX/2;
+  scene.center = vec(cx, cy, 0);
+  scene.range  = Math.max(cx, cy) * 1.2;
+
+  drawAxesPlaneAndArc(XMAX, YMAX, leftMargin, al);
+
+  const base  = Math.max(XMAX+leftMargin, YMAX) || 100;
+  const shaft = base/300;
+
+  ball = sphere({ pos:vec(0,0,0), radius: base/150, color: color.orange, make_trail:false });
+  vxArrow = arrow({ pos:ball.pos, axis:vec(v0x,0,0), color: color.red,   shaftwidth: shaft });
+  vyArrow = arrow({ pos:ball.pos, axis:vec(0,v0y,0), color: color.green, shaftwidth: shaft });
+  vArrow  = arrow({ pos:ball.pos, axis:vec(v0x,v0y,0), color: color.cyan, shaftwidth: shaft });
+
+  perpPlaneLine  = curve({ pos:[ball.pos, ball.pos], color:vec(1,0,1), radius:PERP_PLANE_RADIUS });
+  perpPlaneLabel = label({ pos:ball.pos, text:"", height:14, color:vec(1,0.6,1), box:false, yoffset:14 });
+
+  perpYLine  = curve({ pos:[ball.pos, ball.pos], color:vec(0,0.9,0.9), radius:PERP_Y_RADIUS });
+  perpYLabel = label({ pos:ball.pos, text:"", height:14, color:vec(0.65,0.95,0.95), box:false, yoffset:14 });
+
+  clearApexDrop();
+}
+
+function drawAxesPlaneAndArc(XMAX, YMAX, leftMargin, al){
+  const origin = vec(0,0,0);
+  const labelX = -leftMargin * 0.5;
+
+  curve({ pos:[origin, vec(0,YMAX,0)], color:color.white, radius:0.10 });
+  for(let yy=0; yy<=YMAX+1e-6; yy+=V_TICK){
+    const tick = (yy % (5*V_TICK) === 0) ? 2 : 1;
+    curve({ pos:[vec(-tick,yy,0), vec(0,yy,0)], color:color.white });
+    label({ pos:vec(labelX,yy,0), text:String(yy), box:false, height:TRACK_FONT_PX, color:color.white });
+  }
+
+  const xStep = niceStep(XMAX || 1);
+  curve({ pos:[origin, vec(XMAX,0,0)], color:color.white, radius:0.10 });
+  for(let xx=0; xx<=XMAX+1e-6; xx+=xStep){
+    const tick = (xx % (5*xStep) === 0) ? 2 : 1;
+    curve({ pos:[vec(xx,0,0), vec(xx,-tick,0)], color:color.white });
+    label({ pos:vec(xx,-V_TICK*0.12,0), text:String(xx), box:false, height:TRACK_FONT_PX, color:color.white });
+  }
+
+  const m = Math.tan(al);
+  planeCurve = curve({
+    pos:[vec(-XMAX, -m*XMAX, 0), vec(XMAX, m*XMAX, 0)],
+    color:color.yellow, radius:PLANE_RADIUS
+  });
+
+  const R = Math.max(40, 0.12*YMAX);
+  const pts = [];
+  const steps = Math.max(12, Math.floor(40*al/Math.PI) + 1);
+  for(let a=0; a<=al; a+=al/Math.max(1,steps)){
+    pts.push(vec(R*Math.cos(a), R*Math.sin(a), 0));
+  }
+  angleArc = curve({ pos:pts, color:color.gray(0.8), radius:0.12 });
+  angleArcLabel = label({
+    pos: vec((R+14)*Math.cos(al*0.6), (R+14)*Math.sin(al*0.6), 0),
+    text: `${toDeg(al).toFixed(0)}°`,
+    height: 14, color: color.gray(0.85), box:false
+  });
+}
+
+/* ---------- CHARTS ---------- */
+function initCharts(){
+  if(velocityChart) velocityChart.destroy();
+  if(angleChart) angleChart.destroy();
+
+  // Velocity graph: ground frame (Vx, Vy) + plane frame (V∥, V⊥)
+  velocityChart = new Chart(document.getElementById('velocityChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'Vx (ground)', data:[], borderColor:'#60a5fa', borderWidth:2, pointRadius:0 }, // blue
+      { label:'Vy (ground)', data:[], borderColor:'#34d399', borderWidth:2, pointRadius:0 }, // green
+      { label:'V∥ (plane)',  data:[], borderColor:'#f59e0b', borderWidth:2, pointRadius:0 }, // amber
+      { label:'V⊥ (plane)',  data:[], borderColor:'#f43f5e', borderWidth:2, pointRadius:0 }  // rose
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ type:'linear', min:CHART_X_MIN, max:CHART_X_MAX, title:{display:true, text:'Time (s)', color:'#f3f4f6'}, ticks:{color:'#f3f4f6'} },
+        y:{ title:{display:true, text:'Velocity (m/s)', color:'#f3f4f6'}, min:-100, max:100, ticks:{color:'#f3f4f6'} }
+      },
+      plugins:{ legend:{ labels:{ color:'#f3f4f6' } } }
+    }
+  });
+
+  // Angle graph: resultant velocity angle wrt ground horizontal, and wrt plane
+  angleChart = new Chart(document.getElementById('angleChart'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'Angle to horizontal (ground)', data:[], borderColor:'#22d3ee', borderWidth:2, pointRadius:0 }, // cyan
+      { label:'Angle to plane',               data:[], borderColor:'#fb923c', borderWidth:2, pointRadius:0 }  // orange
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ type:'linear', min:CHART_X_MIN, max:CHART_X_MAX, title:{display:true, text:'Time (s)', color:'#f3f4f6'}, ticks:{color:'#f3f4f6'} },
+        y:{ title:{display:true, text:'Angle (°)', color:'#f3f4f6'}, min:0, max:90, ticks:{color:'#f3f4f6'} }
+      },
+      plugins:{ legend:{ labels:{ color:'#f3f4f6' } } }
+    }
+  });
+}
+
+/* ---------- UI: Update Perpendiculars ---------- */
+function updatePerpendiculars(){
+  const al = toRad(alphaDeg);
+  const m = Math.tan(al);
+  const x = ball.pos.x, y = ball.pos.y;
+
+  const {xf, yf} = footOnPlane(x,y,m);
+  const foot = vec(xf, yf, 0);
+  perpPlaneLine.modify(0, ball.pos);
+  perpPlaneLine.modify(1, foot);
+  const dPlane = distToPlane(x,y,m);
+  const midX = (x+xf)/2, midY = (y+yf)/2;
+  perpPlaneLabel.pos = vec(midX + 0.02*scene.range, midY + 0.02*scene.range, 0);
+  perpPlaneLabel.text = dPlane.toFixed(1);
+
+  const footY = vec(0, y, 0);
+  perpYLine.modify(0, ball.pos);
+  perpYLine.modify(1, footY);
+  perpYLabel.pos = vec(x*0.5, y + 0.02*scene.range, 0);
+  perpYLabel.text = Math.abs(x).toFixed(1);
+}
+
+function updateCountersAndArrows(vxNow, vyNow){
+  const al = toRad(alphaDeg);
+  const {vpar, vperp} = vAlongPerp(vxNow, vyNow, al);
+
+  document.getElementById('Vpar').textContent  = vpar.toFixed(1);
+  document.getElementById('Vperp').textContent = vperp.toFixed(1);
+
+  const angH = Math.abs(Math.atan2(vyNow, vxNow) * 180/Math.PI);
+  const angV = Math.abs(Math.atan2(vxNow, Math.abs(vyNow)) * 180/Math.PI);
+  document.getElementById('AngH').textContent = angH.toFixed(1);
+  document.getElementById('AngV').textContent = angV.toFixed(1);
+
+  vxArrow.pos = vyArrow.pos = vArrow.pos = ball.pos;
+  vxArrow.axis = vec(vxNow,0,0);
+  vyArrow.axis = vec(0,vyNow,0);
+  vArrow.axis  = vec(vxNow,vyNow,0);
+}
+
+/* ---------- APEX DROP (post-flight) ---------- */
+function clearApexDrop(){
+  if (apexDropLine){ apexDropLine.visible = false; apexDropLine = null; }
+}
+function maybeDrawApexDrop(){
+  if (!document.getElementById('chkApexDrop').checked) return;
+  if (apexDropLine) return;
+  apexDropLine = curve({
+    pos: [vec(x_peak, y_peak, 0), vec(x_peak, 0, 0)],
+    color: color.gray(0.85),
+    radius: APEX_DROP_RADIUS
+  });
+}
+
+/* ---------- STATE FROM TIME ---------- */
+function setStateFromTime(tSel){
+  const tClamp = Math.max(0, Math.min(TOF, tSel));
+  t = tClamp;
+
+  const vx = v0x;
+  const vy = v0y - g*t;
+  const x  = v0x * t;
+  const y  = v0y * t - 0.5*g*t*t;
+
+  ball.pos = vec(x, Math.max(0, y), 0);
+
+  updatePerpendiculars();
+  updateCountersAndArrows(vx, vy);
+}
+
+/* ---------- SAMPLERS ---------- */
+function sampleAll(tt){
+  const vx = v0x;
+  const vy = v0y - g*tt;
+  const al = toRad(alphaDeg);
+  const {vpar, vperp} = vAlongPerp(vx, vy, al);
+  const ang_ground = Math.abs(Math.atan2(vy, vx)) * 180/Math.PI;
+  const ang_plane  = Math.atan2(Math.abs(vperp), Math.abs(vpar)) * 180/Math.PI; // 0..90
+  return { vx, vy, vpar, vperp, ang_ground, ang_plane };
+}
+
+/* ---------- ANIMATION ---------- */
+function tick(){
+  const tPrev = t;
+  const tNext = t + DT;
+
+  if (tPrev >= TOF || tPrev >= CHART_X_MAX) {
+    ball.make_trail = false;
+    clearInterval(animTimer); animTimer=null;
+    maybeDrawApexDrop();
+    return;
+  }
+
+  t = Math.min(tNext, CHART_X_MAX);
+  setStateFromTime(t);
+
+  if (tPrev < TOF) {
+    const tS = Math.min(t, TOF);
+    const s  = sampleAll(tS);
+    velocityChart.data.datasets[0].data.push({ x:tS, y:s.vx });
+    velocityChart.data.datasets[1].data.push({ x:tS, y:s.vy });
+    velocityChart.data.datasets[2].data.push({ x:tS, y:s.vpar });
+    velocityChart.data.datasets[3].data.push({ x:tS, y:s.vperp });
+
+    angleChart.data.datasets[0].data.push({ x:tS, y:s.ang_ground });
+    angleChart.data.datasets[1].data.push({ x:tS, y:s.ang_plane  });
+  }
+
+  velocityChart.update('none'); angleChart.update('none');
+}
+
+/* ---------- WIRING ---------- */
+function reset(){
+  if(animTimer){ clearInterval(animTimer); animTimer=null; }
+  initScene();
+  initCharts();
+  velocityChart.data.datasets.forEach(d=>d.data=[]);
+  angleChart.data.datasets.forEach(d=>d.data=[]);
+  document.getElementById('timeSlider').value = "0";
+  document.getElementById('timeInput').value  = "0";
+  if (ball) ball.clear_trail();
+  setTrailMode(false);
+  clearApexDrop();
+  setStateFromTime(0);
+}
+
+/* Controls */
+document.getElementById('speedSlider').oninput = e=>{
+  speed = Math.min(100, parseFloat(e.target.value)||0);
+  document.getElementById('speedInput').value = speed; reset();
+};
+document.getElementById('speedInput').oninput = e=>{
+  speed = Math.min(100, parseFloat(e.target.value)||0);
+  document.getElementById('speedSlider').value = speed; reset();
+};
+document.getElementById('angleSlider').oninput = e=>{
+  thetaDeg = parseFloat(e.target.value)||0;
+  document.getElementById('angleInput').value = thetaDeg; reset();
+};
+document.getElementById('angleInput').oninput = e=>{
+  thetaDeg = parseFloat(e.target.value)||0;
+  document.getElementById('angleSlider').value = thetaDeg; reset();
+};
+document.getElementById('planeSlider').oninput = e=>{
+  alphaDeg = parseFloat(e.target.value)||0;
+  document.getElementById('planeInput').value = alphaDeg; reset();
+};
+document.getElementById('planeInput').oninput = e=>{
+  alphaDeg = parseFloat(e.target.value)||0;
+  document.getElementById('planeSlider').value = alphaDeg; reset();
+};
+
+/* Time scrubbing (no charts/trails/peak drop) */
+document.getElementById('timeSlider').oninput = e=>{
+  setTrailMode(false);
+  const ts = parseFloat(e.target.value)||0;
+  document.getElementById('timeInput').value = ts.toFixed(2);
+  setStateFromTime(ts);
+};
+document.getElementById('timeInput').oninput = e=>{
+  setTrailMode(false);
+  const ts = parseFloat(e.target.value)||0;
+  document.getElementById('timeSlider').value = ts;
+  setStateFromTime(ts);
+};
+
+/* Checkbox: if toggled after motion finished, draw/remove */
+document.getElementById('chkApexDrop').onchange = ()=>{
+  if (!animTimer && t >= TOF) {
+    if (document.getElementById('chkApexDrop').checked) maybeDrawApexDrop();
+    else clearApexDrop();
+  }
+};
+
+/* Buttons */
+document.getElementById('btnPlay').onclick = ()=>{
+  computeParams();
+  if(animTimer) clearInterval(animTimer);
+  velocityChart.data.datasets.forEach(d=>d.data=[]);
+  angleChart.data.datasets.forEach(d=>d.data=[]);
+  if (ball) ball.clear_trail();
+  clearApexDrop();
+  setTrailMode(true);
+  t=0; setStateFromTime(0);
+  animTimer = setInterval(tick, 20);
+};
+document.getElementById('btnPause').onclick = ()=>{
+  if(animTimer){ clearInterval(animTimer); animTimer=null; }
+  setTrailMode(false);
+};
+document.getElementById('btnReset').onclick = reset;
+
+/* Boot */
+$(document).ready(()=>{ reset(); });
+</script>
+</body>
+</html>
