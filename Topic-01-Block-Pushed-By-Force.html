@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Force on a Block (no friction) — Left-edge Track Anchor</title>
+
+<!-- GlowScript / VPython -->
+<script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+<script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+<script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+<script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+  :root{
+    --panel-w: 17rem;     /* narrow left panel */
+    --canvas-h: 280px;    /* shorter canvas */
+    --graph-h: 300px;     /* taller graphs */
+  }
+  body{ margin:0; background:#0f172a; color:#e5e7eb; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { display:grid; grid-template-columns: var(--panel-w) 1fr; grid-template-rows: auto auto; height:100vh; }
+  .left { grid-row: 1 / span 2; padding:0.8rem; background:#111827; border-right:1px solid #1f2937; }
+  .rightTop { padding:.4rem .8rem .2rem .8rem; }
+  .rightBottom { display:grid; grid-template-columns: 1fr 1fr; gap:.6rem; padding:.2rem .8rem .8rem .8rem; }
+  .card { background:#111827; border:1px solid #1f2937; border-radius:.6rem; padding:.8rem; }
+  .row  { display:flex; gap:.6rem; align-items:center; margin:.5rem 0; }
+  .row > * { flex:1; }
+  input[type="range"]{ width:100%; }
+  .btn { background:#2563eb; border:none; border-radius:.5rem; padding:.5rem .9rem; font-weight:800; color:#fff; }
+  .btn:hover{ background:#1d4ed8; }
+  .readout{ display:flex; justify-content:space-between; padding:.2rem 0; font-weight:800; }
+  .readout span:last-child{ color:#fde047; }
+  #sceneHolder{ height:var(--canvas-h); display:flex; }
+  #glowscript{ flex:1; }
+  canvas.graph{ width:100%; height:var(--graph-h); background:#0b1220; border-radius:.5rem; }
+  .title{ font-weight:900; font-size:1.05rem; margin:0 0 .4rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- LEFT PANEL -->
+  <aside class="left">
+    <h2 class="title">Force on a Block (no friction)</h2>
+
+    <div class="card">
+      <div class="row">
+        <label style="flex:0 0 8rem; font-weight:800;">Force F (N)</label>
+        <input id="F" type="range" min="0" max="25" step="1" value="10">
+        <span id="Fv" style="width:3rem; text-align:right; font-weight:900;">10</span>
+      </div>
+      <div class="row">
+        <label style="flex:0 0 8rem; font-weight:800;">Mass m (kg)</label>
+        <input id="m" type="range" min="0.5" max="10" step="0.5" value="2">
+        <span id="mv" style="width:3rem; text-align:right; font-weight:900;">2</span>
+      </div>
+      <div class="row">
+        <label style="flex:0 0 8rem; font-weight:800;">Force time T<sub>F</sub> (s)</label>
+        <input id="Tf" type="range" min="0" max="10" step="0.5" value="5">
+        <span id="Tfv" style="width:3rem; text-align:right; font-weight:900;">5</span>
+      </div>
+
+      <div class="row" style="gap:.5rem; margin-top:.6rem;">
+        <button id="play"  class="btn" style="flex:1;">Play</button>
+        <button id="pause" class="btn" style="flex:1; background:#334155;">Pause</button>
+        <button id="reset" class="btn" style="flex:1;">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="readout"><span>a = F/m</span><span id="aOut">0.00</span></div>
+      <div class="readout"><span>v (m/s)</span><span id="vOut">0.00</span></div>
+      <div class="readout"><span>x (m)</span><span id="xOut">0.00</span></div>
+    </div>
+  </aside>
+
+  <!-- CANVAS -->
+  <section class="rightTop">
+    <div id="sceneHolder"><div id="glowscript"></div></div>
+  </section>
+
+  <!-- GRAPHS -->
+  <section class="rightBottom">
+    <div class="card">
+      <div class="title">Velocity vs Time</div>
+      <canvas id="velCanvas" class="graph"></canvas>
+    </div>
+    <div class="card">
+      <div class="title">Acceleration vs Time</div>
+      <canvas id="accCanvas" class="graph"></canvas>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  // ---- UI ----
+  const F = $('F'), m = $('m'), Tf = $('Tf');
+  const Fv=$('Fv'), mv=$('mv'), Tfv=$('Tfv');
+  const aOut=$('aOut'), vOut=$('vOut'), xOut=$('xOut');
+  const btnPlay=$('play'), btnPause=$('pause'), btnReset=$('reset');
+
+  // ---- Graphs ----
+  const velC = $('velCanvas'), accC = $('accCanvas');
+  const vctx = velC.getContext('2d'), actx = accC.getContext('2d');
+
+  function clearGraph(ctx, labelY, currentTime){
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    ctx.clearRect(0,0,w,h);
+    // background
+    ctx.fillStyle = '#0b1220'; ctx.fillRect(0,0,w,h);
+    // axes
+    ctx.strokeStyle='#314155'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(40, h-28); ctx.lineTo(w-12, h-28); ctx.stroke(); // x
+    ctx.beginPath(); ctx.moveTo(40, h-28); ctx.lineTo(40, 16); ctx.stroke(); // y
+    // x-axis label at extreme right with current time
+    ctx.fillStyle='#93c5fd'; ctx.font='12px Inter, system-ui';
+    ctx.fillText(`t = ${currentTime.toFixed(2)} s`, w-40, h-10);
+    // y-axis label
+    ctx.save();
+    ctx.translate(14,h/2+10); ctx.rotate(-Math.PI/2);
+    ctx.fillText(labelY, 0, 0);
+    ctx.restore();
+  }
+
+  function drawPolyline(ctx, data, color){
+    if (data.length < 2) return;
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    const padL=40, padR=12, padB=28, padT=16;
+    const innerW = w - padL - padR, innerH = h - padT - padB;
+
+    const tmax = Math.max(1, data[data.length-1].t);
+    let ymin=+Infinity, ymax=-Infinity;
+    for (const p of data){ ymin=Math.min(ymin,p.y); ymax=Math.max(ymax,p.y);}
+    if (ymin===ymax){ ymin-=1; ymax+=1; }
+
+    ctx.strokeStyle=color; ctx.lineWidth=2;
+    ctx.beginPath();
+    for (let i=0;i<data.length;i++){
+      const px = padL + innerW*(data[i].t/tmax);
+      const py = padT + innerH*(1 - (data[i].y - ymin)/(ymax - ymin));
+      if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle='#64748b'; ctx.font='11px Inter';
+    ctx.fillText(ymax.toFixed(2), 4, padT+10);
+    ctx.fillText(ymin.toFixed(2), 4, padT+innerH);
+  }
+
+  // ---- Simulation (no friction) ----
+  let scene, track, forceArrow, block;
+  let X_LEFT, X_RIGHT, SCALE, track_start;        // computed from visible view
+  const TRACK_Y = 90;
+  const TRACK_M = 200;                // increased distance on the track
+
+  // state
+  let t=0, x=0, v=0, a=0;
+  let anim=null, DT=0.02;
+
+  // data logs
+  let vData=[], aData=[];
+
+  const worldX = xm => track_start + xm*SCALE;
+
+  function initScene(){
+    const container = document.getElementById('glowscript');
+    container.innerHTML='';
+    if (typeof window.__context !== "undefined") delete window.__context;
+    window.__context = { glowscript_container: container };
+
+    scene = canvas({ width: container.clientWidth||1200,
+                     height: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--canvas-h')) || 280,
+                     background: color.black });
+    scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+
+    // Dynamic scaling to fill canvas without empty space on left
+    const block_size_y = 40; // block height
+    const vertical_margin = 100; // space above/below
+    const vertical_span = block_size_y + vertical_margin;
+    const aspect = scene.width / scene.height || 1;
+    const range_val = vertical_span / 2;
+    const left_margin = 60; // for force arrow
+    const visible_left = -left_margin;
+    scene.center = vec(visible_left + range_val * aspect, TRACK_Y + block_size_y / 2, 0);
+    scene.range = range_val;
+
+    track_start = 0;
+    X_RIGHT = visible_left + 2 * range_val * aspect;
+    SCALE = (X_RIGHT - track_start) / TRACK_M;
+
+    // track: start at 0 (block position)
+    track = curve({ pos:[vec(track_start, TRACK_Y, 0), vec(X_RIGHT, TRACK_Y, 0)],
+                    radius: 3.6, color: color.gray(0.8) });
+
+    // force vector: left of track start
+    forceArrow = arrow({ pos: vec(track_start - left_margin, TRACK_Y, 0),
+                         axis: vec(0,0,0), color: color.cyan, shaftwidth: 4 });
+
+    // block: 100% bigger
+    block = box({ pos: vec(track_start - 100, TRACK_Y + block_size_y / 2, 0),
+                  size: vec(56, 40, 8), color: color.orange });
+  }
+
+  function resetState(){
+    t=0; x=0; v=0; a = (parseFloat(F.value)||0) / (parseFloat(m.value)||1);
+    block.pos.x = track_start - 100;  // Initial position at -100
+    block.pos.y = TRACK_Y + 20;
+
+    // set force arrow length proportional to F
+    const Flen = 6*(parseFloat(F.value)||0);
+    forceArrow.axis = vec(Flen, 0, 0);
+
+    // blank graphs
+    vData = []; aData = [];
+    clearGraph(vctx, 'v (m/s)', t);
+    clearGraph(actx,'a (m/s²)', t);
+
+    // readouts
+    aOut.textContent = (a).toFixed(2);
+    vOut.textContent = '0.00';
+    xOut.textContent = '0.00';
+  }
+
+  function step(){
+    if (x >= TRACK_M) {
+      pause();
+      return;
+    }
+
+    const mval = Math.max(0.0001, parseFloat(m.value)||1);
+    const Fval = Math.max(0, parseFloat(F.value)||0);
+    const Tforce = Math.max(0, parseFloat(Tf.value)||0);
+
+    a = (t <= Tforce) ? (Fval/mval) : 0;
+    v += a*DT;
+    x += v*DT;
+
+    // visually keep block on track
+    const xMax = TRACK_M;
+    block.pos.x = worldX(Math.min(x, xMax));
+
+    // logs for graphs
+    vData.push({t, y:v});
+    aData.push({t, y:a});
+
+    // redraw graphs with current time
+    clearGraph(vctx,'v (m/s)', t); drawPolyline(vctx, vData, '#38bdf8');
+    clearGraph(actx,'a (m/s²)', t); drawPolyline(actx, aData, '#fbbf24');
+
+    // readouts
+    aOut.textContent = a.toFixed(2);
+    vOut.textContent = v.toFixed(2);
+    xOut.textContent = x.toFixed(2);
+
+    t += DT;
+  }
+
+  function play(){ if (anim) return; anim = setInterval(step, 20); }
+  function pause(){ if (anim){ clearInterval(anim); anim=null; } }
+  function reset(){
+    pause();
+    Fv.textContent = F.value; mv.textContent = m.value; Tfv.textContent = Tf.value;
+    initScene();
+    resetState();
+  }
+
+  [F,m,Tf].forEach(el=> el.addEventListener('input', ()=>{
+    if (el===F) Fv.textContent = F.value;
+    if (el===m) mv.textContent = m.value;
+    if (el===Tf) Tfv.textContent = Tf.value;
+    if (!anim){
+      forceArrow.axis = vec(6*(parseFloat(F.value)||0),0,0);
+      aOut.textContent = ((parseFloat(F.value)||0)/Math.max(0.0001, parseFloat(m.value)||1)).toFixed(2);
+    }
+  }));
+
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', pause);
+  btnReset.addEventListener('click', reset);
+
+  // first boot
+  function boot(){
+    if (typeof window.canvas !== 'function'){ setTimeout(boot,30); return; }
+    initScene(); resetState();
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

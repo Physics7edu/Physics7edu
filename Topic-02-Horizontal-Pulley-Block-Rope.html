@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Block–Pulley–Person (Tension Controlled)</title>
+
+  <!-- GlowScript / VPython -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <!-- Minimal UI styles -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    html,body{height:100%;margin:0;background:#0f172a;color:#e5e7eb;font-family:Inter,system-ui,sans-serif}
+    .wrap{display:flex;height:100vh}
+    .left{width:22rem;padding:1rem;background:#111827;overflow:auto;border-right:1px solid #1f2937}
+    .card{background:#1f2937;border-radius:.7rem;padding:.8rem;box-shadow:0 6px 14px rgba(0,0,0,.35);margin-bottom:.8rem}
+    .label{font-weight:800;margin:.2rem 0 .4rem}
+    .row{display:flex;gap:.6rem;align-items:center}
+    .row>*{flex:1}
+    input[type=number]{color:#111827;padding:.35rem;border-radius:.4rem}
+    .btn{background:#2563eb;color:#fff;border:none;border-radius:.45rem;font-weight:800;padding:.5rem 0}
+    .btn:hover{background:#1d4ed8}
+    .pair{display:flex;justify-content:space-between;font-weight:800;margin:.18rem 0}
+    .pair span:last-child{color:#facc15}
+    .right{flex:1;display:flex}
+    #glowscript{flex:1}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <h1 class="text-lg font-extrabold mb-2">Block–Pulley–Person (Frictionless)</h1>
+
+    <div class="card">
+      <div class="label">Mass of block m (kg)</div>
+      <div class="row">
+        <input id="mSlider" type="range" min="0.5" max="50" step="0.5" value="10">
+        <input id="mInput"  type="number" min="0.5" max="50" step="0.5" value="10">
+      </div>
+
+      <div class="label">Tension T (N)</div>
+      <div class="row">
+        <input id="TSlider" type="range" min="0" max="200" step="1" value="40">
+        <input id="TInput"  type="number" min="0" max="200" step="1" value="40">
+      </div>
+
+      <div class="row" style="gap:.5rem;margin-top:.5rem">
+        <button id="btnPlay"  class="btn">Play</button>
+        <button id="btnPause" class="btn">Pause</button>
+        <button id="btnReset" class="btn">Reset</button>
+      </div>
+      <p id="bootWarn" class="text-sm text-red-300 mt-2" style="display:none">
+        Loading 3D engine… If this persists, a network/content blocker may be preventing glowscript.org from loading.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="pair"><span>Acceleration a</span><span id="aLbl">—</span></div>
+      <div class="pair"><span>Velocity v</span><span id="vLbl">—</span></div>
+      <div class="pair"><span>Position x</span><span id="xLbl">—</span></div>
+      <div class="pair"><span>Time t</span><span id="tLbl">—</span></div>
+      <p class="text-xs text-gray-300 mt-2">
+        Model: ideal rope & pulley, horizontal frictionless track, constant applied tension.
+      </p>
+    </div>
+  </div>
+
+  <div class="right">
+    <div id="glowscript"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ====== DOM ======
+  const $ = id => document.getElementById(id);
+  const mS=$('mSlider'), mI=$('mInput');
+  const TS=$('TSlider'), TI=$('TInput');
+  const btnPlay=$('btnPlay'), btnPause=$('btnPause'), btnReset=$('btnReset');
+  const aLbl=$('aLbl'), vLbl=$('vLbl'), xLbl=$('xLbl'), tLbl=$('tLbl'), bootWarn=$('bootWarn');
+
+  // ====== State (physics) ======
+  let m=10;      // kg
+  let T=40;      // N
+  let x=0, v=0;  // position (m), velocity (m/s) along +x (to the right)
+  let t=0;       // time (s)
+  const DT=0.02; // s
+
+  // World/geometry (VPython world units ~ meters for intuition)
+  const WORLD_X = 900, WORLD_Y = 320;
+  const LEFT_MARGIN  = 0.10*WORLD_X;
+  const RIGHT_MARGIN = 0.90*WORLD_X;
+
+  // Track & pulley layout
+  const TRACK_Y = 80;                      // height of track centerline
+  const TRACK_LEN = RIGHT_MARGIN - LEFT_MARGIN;
+  const PULLEY_X = RIGHT_MARGIN;           // pulley at right margin
+  const PULLEY_Y = TRACK_Y + 30;           // slightly above track
+  const BLOCK_W  = 80;                     // larger, easy to see
+  const BLOCK_H  = 50;
+
+  // VPython objects
+  let scene=null, ground=null, track=null, startTick=null, endTick=null;
+  let block=null, pulley=null, ropeTop=null, ropeDrop=null, hand=null, person=null, tensionArrowTop=null, tensionArrowDown=null, tensionLabel=null;
+  let animTimer=null;
+
+  // ====== Helpers ======
+  function fmt(v, u=''){
+    if (!isFinite(v)) return '—';
+    const s = Math.abs(v)>=1000 ? v.toFixed(0) : v.toFixed(2);
+    return s + (u ? ` ${u}` : '');
+  }
+  function aNow(){ return (m>0? T/m : 0); }
+
+  // ====== Scene ======
+  function initScene(){
+    const container = document.getElementById('glowscript');
+    container.innerHTML='';
+    if (typeof window.__context !== 'undefined') delete window.__context;
+    window.__context = { glowscript_container: container };
+
+    if (typeof window.canvas !== 'function') throw new Error('GlowScript not loaded');
+
+    scene = canvas({ width: container.clientWidth||960, height: container.clientHeight||560, background: color.black });
+    scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+    scene.center = vec(WORLD_X/2, WORLD_Y/2, 0);
+    scene.range  = Math.max(WORLD_X/2, WORLD_Y/2) * 1.08;
+
+    // Floor
+    ground = box({ pos: vec(WORLD_X/2, 0, 0), size: vec(WORLD_X, 8, 0.1), color: color.gray(0.4) });
+
+    // Track (thicker) starting at left 10% margin, ending at right 10% margin
+    track = curve({ pos:[vec(LEFT_MARGIN, TRACK_Y, 0), vec(RIGHT_MARGIN, TRACK_Y, 0)], color: color.white, radius: 2.4 });
+    startTick = ring({ pos: vec(LEFT_MARGIN, TRACK_Y, 0), axis: vec(0,0,1), radius: 8, thickness: 1.8, color: color.white });
+    endTick   = ring({ pos: vec(RIGHT_MARGIN, TRACK_Y, 0), axis: vec(0,0,1), radius: 8, thickness: 1.8, color: color.white });
+
+    // Pulley
+    pulley = ring({ pos: vec(PULLEY_X, PULLEY_Y, 0), axis: vec(0,0,1), radius: 18, thickness: 4, color: color.yellow });
+
+    // Block at left end (front face centered on track)
+    block = box({ pos: vec(LEFT_MARGIN + BLOCK_W/2, TRACK_Y + BLOCK_H/2, 0), size: vec(BLOCK_W, BLOCK_H, 40), color: color.orange });
+
+    // Person on right, holding rope end
+    const px = PULLEY_X + 80, py = PULLEY_Y - 40;
+    person = cylinder({ pos: vec(px, 0, 0), axis: vec(0, 70, 0), radius: 6, color: color.gray(0.8) });
+    hand   = sphere({ pos: vec(px, py, 0), radius: 6, color: color.cyan });
+
+    // Rope: top horizontal + down segment
+    ropeTop  = curve({ pos:[vec(blockTopX(), PULLEY_Y, 0), vec(PULLEY_X, PULLEY_Y, 0)], color: color.white, radius: 1.2 });
+    ropeDrop = curve({ pos:[vec(PULLEY_X, PULLEY_Y, 0), hand.pos], color: color.white, radius: 1.2 });
+
+    // Tension arrows (thicker, visible)
+    tensionArrowTop  = arrow({ pos: vec(blockTopX()+8, PULLEY_Y+12, 0), axis: vec(0,0,0), color: color.red,   shaftwidth: 4 });
+    tensionArrowDown = arrow({ pos: vec(PULLEY_X+18, PULLEY_Y-8, 0),    axis: vec(0,0,0), color: color.red,   shaftwidth: 4 });
+    tensionLabel     = label({ pos: vec(PULLEY_X+95, PULLEY_Y+10, 0), text: '', color: color.red, height: 14, box:false });
+
+    // First layout
+    updateRopeGeometry();
+    updateHUD();
+  }
+
+  function blockTopX(){
+    // Top rope attaches at the block’s top-right corner
+    return block.pos.x + (BLOCK_W/2);
+  }
+
+  function updateRopeGeometry(){
+    // Keep rope taut: as block moves Δx to the right, the hand moves down by Δx
+    const attachTop = vec(blockTopX(), PULLEY_Y, 0);
+    ropeTop.modify(0, attachTop);
+    ropeTop.modify(1, vec(PULLEY_X, PULLEY_Y, 0));
+
+    const dropTop = vec(PULLEY_X, PULLEY_Y, 0);
+    const handNew = vec(hand.pos.x, PULLEY_Y - (attachTop.x - (LEFT_MARGIN + BLOCK_W/2)) - 40, 0); // base drop + Δx
+    hand.pos = handNew;
+
+    ropeDrop.modify(0, dropTop);
+    ropeDrop.modify(1, handNew);
+
+    // Tension arrows scale with T
+    const s = Math.max(0, T) * 0.4; // scale to world-units
+    tensionArrowTop.pos  = vec(attachTop.x + 8, attachTop.y + 12, 0);
+    tensionArrowTop.axis = vec(Math.min(160, s), 0, 0);
+
+    tensionArrowDown.pos  = vec(PULLEY_X + 18, PULLEY_Y - 8, 0);
+    tensionArrowDown.axis = vec(0, -Math.min(160, s), 0);
+
+    tensionLabel.text = `T = ${T.toFixed(1)} N`;
+  }
+
+  // ====== Physics & HUD ======
+  function updateHUD(){
+    aLbl.textContent = fmt(aNow(), 'm/s²');
+    vLbl.textContent = fmt(v, 'm/s');
+    xLbl.textContent = fmt(x, 'm');
+    tLbl.textContent = fmt(t, 's');
+  }
+
+  function clampBlockAtPulley(){
+    const maxX = PULLEY_X - 1.1*BLOCK_W;      // stop before pulley
+    const minX = LEFT_MARGIN + BLOCK_W/2;     // start circle
+    if (block.pos.x > maxX){ block.pos.x = maxX; v = 0; return true; }
+    if (block.pos.x < minX){ block.pos.x = minX; v = 0; return true; }
+    return false;
+  }
+
+  // ====== Animation ======
+  function step(){
+    if (!block) return;
+
+    // Kinematics under current T (constant in DT)
+    const a = aNow();
+    v += a * DT;
+    x += v * DT;
+
+    // Move block
+    block.pos.x = (LEFT_MARGIN + BLOCK_W/2) + x;
+
+    // Stop if it hits the pulley or left start
+    const hit = clampBlockAtPulley();
+    if (hit){ stop(); }
+
+    // Rope geometry follows
+    updateRopeGeometry();
+
+    // Time + HUD
+    t += DT;
+    updateHUD();
+  }
+
+  function play(){ stop(); animTimer = setInterval(step, 20); }
+  function stop(){ if (animTimer){ clearInterval(animTimer); animTimer=null; } }
+  function reset(){
+    stop();
+    x = 0; v = 0; t = 0;
+    if (!block) return;
+    block.pos.x = LEFT_MARGIN + BLOCK_W/2;
+    updateRopeGeometry();
+    updateHUD();
+  }
+
+  // ====== Wiring ======
+  function sync(slider, input, cb){
+    slider.addEventListener('input', e=>{ input.value = e.target.value; cb(parseFloat(e.target.value)); });
+    input.addEventListener('input',  e=>{ slider.value = e.target.value; cb(parseFloat(e.target.value)); });
+  }
+
+  sync(mS, mI, val=>{ m = Math.max(0.5, Math.min(50, val||0)); updateHUD(); });
+  sync(TS, TI, val=>{ T = Math.max(0, Math.min(200, val||0));  updateRopeGeometry(); updateHUD(); });
+
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', stop);
+  btnReset.addEventListener('click', reset);
+
+  // ====== Robust boot (avoid “canvas is not defined”) ======
+  let tries=0;
+  function safeBoot(){
+    try{
+      if (typeof window.canvas==='function' && typeof window.vec==='function'){
+        bootWarn.style.display='none';
+        initScene();
+        updateHUD();
+        return;
+      }
+    }catch(e){}
+    tries++;
+    bootWarn.style.display='block';
+    if (tries<200) setTimeout(safeBoot, 30);
+    else bootWarn.textContent = 'Failed to load GlowScript. Check network/content blocker and reload.';
+  }
+  window.addEventListener('load', safeBoot);
+})();
+</script>
+</body>
+</html>
