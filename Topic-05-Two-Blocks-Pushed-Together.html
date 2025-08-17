@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Two Blocks — FBDs on right, motion fixed, A at (-200,0)</title>
+
+  <!-- GlowScript / VPython -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <style>
+    html,body{height:100%;margin:0;background:#0b1020;color:#e5e7eb;font-family:Inter,system-ui,sans-serif}
+    /* Left controls, center main canvas, right FBD panel */
+    .wrap{display:grid;grid-template-columns:24rem 1fr 360px;grid-template-rows:1fr;height:100vh}
+    .left{padding:1rem;background:#101525;overflow:auto;border-right:1px solid #1f2937}
+    .card{background:#121a2f;border-radius:.7rem;padding:.8rem;box-shadow:0 6px 14px rgba(0,0,0,.35);margin-bottom:.8rem}
+    .label{font-weight:800;margin:.2rem 0 .4rem}
+    .row{display:flex;gap:.6rem;align-items:center}
+    .row>*{flex:1}
+    input[type=number]{color:#111827;padding:.35rem;border-radius:.4rem}
+    .btn{background:#2563eb;color:#fff;border:none;border-radius:.45rem;font-weight:800;padding:.5rem 0}
+    .btn:hover{background:#1d4ed8}
+    .pair{display:flex;justify-content:space-between;font-weight:800;margin:.18rem 0}
+    .pair span:last-child{color:#facc15}
+    .main{display:flex;align-items:stretch;justify-content:stretch}
+    #mainCanvas{width:100%;height:100%}
+    .right{border-left:1px solid #1f2937;display:grid;grid-template-rows:auto 1fr 1fr}
+    .rightHeader{padding:.6rem .8rem;border-bottom:1px solid #1f2937;font-weight:800}
+    .fbdPane{border-top:1px solid #1f2937}
+    #fbdA,#fbdB{width:100%;height:100%}
+    .tog{display:flex;gap:.75rem;margin-top:.5rem;flex-wrap:wrap}
+    .tog label{display:flex;align-items:center;gap:.4rem;font-weight:700}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- LEFT: controls + readouts -->
+  <div class="left">
+    <h1 class="text-lg font-extrabold mb-2">Two Blocks (frictionless)</h1>
+
+    <div class="card">
+      <div class="label">Mass of A (kg)</div>
+      <div class="row">
+        <input id="mASlider" type="range" min="0.5" max="50" step="0.5" value="12">
+        <input id="mAInput"  type="number" min="0.5" max="50" step="0.5" value="12">
+      </div>
+
+      <div class="label">Mass of B (kg)</div>
+      <div class="row">
+        <input id="mBSlider" type="range" min="0.5" max="50" step="0.5" value="6">
+        <input id="mBInput"  type="number" min="0.5" max="50" step="0.5" value="6">
+      </div>
+
+      <div class="label">Push on A, F<sub>push</sub> (N)</div>
+      <div class="row">
+        <input id="FpSlider" type="range" min="0" max="500" step="5" value="150">
+        <input id="FpInput"  type="number" min="0" max="500" step="5" value="150">
+      </div>
+
+      <div class="tog">
+        <label><input id="showA" type="checkbox" checked> Show A (FBD)</label>
+        <label><input id="showB" type="checkbox" checked> Show B (FBD)</label>
+      </div>
+
+      <div class="row" style="gap:.5rem;margin-top:.6rem">
+        <button id="btnPlay"  class="btn">Play</button>
+        <button id="btnPause" class="btn">Pause</button>
+        <button id="btnReset" class="btn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pair"><span>a (both)</span><span id="aLbl">—</span></div>
+      <div class="pair"><span>v (both)</span><span id="vLbl">—</span></div>
+      <div class="pair"><span>A→B</span><span id="NabLbl">—</span></div>
+      <div class="pair"><span>B→A</span><span id="NbaLbl">—</span></div>
+      <div class="pair"><span>F<sub>push</sub></span><span id="FpLbl">—</span></div>
+      <div class="pair"><span>t</span><span id="tLbl">—</span></div>
+    </div>
+  </div>
+
+  <!-- CENTER: main canvas -->
+  <div class="main">
+    <div id="mainCanvas"></div>
+  </div>
+
+  <!-- RIGHT: FBD panel -->
+  <div class="right">
+    <div class="rightHeader">Free-Body Diagrams</div>
+    <div class="fbdPane" id="fbdA"></div>
+    <div class="fbdPane" id="fbdB"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---------- Controls ----------
+  const $ = id => document.getElementById(id);
+  const mAS=$('mASlider'), mAI=$('mAInput');
+  const mBS=$('mBSlider'), mBI=$('mBInput');
+  const FpS=$('FpSlider'), FpI=$('FpInput');
+  const chkA=$('showA'), chkB=$('showB');
+  const btnPlay=$('btnPlay'), btnPause=$('btnPause'), btnReset=$('btnReset');
+
+  const aLbl=$('aLbl'), vLbl=$('vLbl'), NabLbl=$('NabLbl'), NbaLbl=$('NbaLbl'), FpLbl=$('FpLbl'), tLbl=$('tLbl');
+
+  // ---------- State ----------
+  let mA=12, mB=6, Fp=150;
+  let a=0, v=0, x=0, t=0;   // x displaces both to the right from the start position
+  const DT=0.02;
+
+  // Geometry
+  const TABLE_Y = 0;
+  const START_X = -200;  // A starts at (-200, 0)
+  const GAP     = 4;
+
+  // Mass -> size (area ∝ mass)
+  const BASE_W=140, BASE_H=100, MREF=10;
+  function dimsFor(m){ const s=Math.sqrt(Math.max(0.5,m)/MREF); return {W:BASE_W*s, H:BASE_H*s}; }
+
+  // Arrow scaling
+  function lenFromForce(F){
+    const k = 0.9; // px per N
+    return Math.max(40, Math.min(260, k*F));
+  }
+
+  // ---------- Scenes ----------
+  let sceneMain, table, A, B, pushArrow, nBAArrow, nABArrow;
+  let pushLbl, nBALbl, nABLbl, labelA_main, labelB_main;
+
+  // FBD A
+  let sceneFBD_A, Aghost, FpushA, FbaA, NA, WtA, LA_push, LA_ba, LA_N, LA_W, LA_letter;
+  // FBD B
+  let sceneFBD_B, Bghost, FabB, NB, WtB, LB_ab, LB_N, LB_W, LB_letter;
+
+  function fmt(v,u=''){ if(!isFinite(v)) return '—'; const s=(Math.abs(v)>=1000)?v.toFixed(0):v.toFixed(2); return s+(u?` ${u}`:''); }
+  function accel(){ return (mA+mB>0)? Fp/(mA+mB) : 0; }
+  function N_AB(){ return (mA+mB>0)? (mB/(mA+mB))*Fp : 0; } // A on B magnitude
+
+  function createCanvasIn(container){
+    if (typeof window.__context !== 'undefined') delete window.__context;
+    window.__context = { glowscript_container: container };
+    return canvas({ width: container.clientWidth||600, height: container.clientHeight||400, background: color.black });
+  }
+
+  // ----- MAIN SCENE -----
+  function initMain(){
+    const container = document.getElementById('mainCanvas');
+    container.innerHTML = '';
+    sceneMain = createCanvasIn(container);
+    sceneMain.autoscale=false; sceneMain.userzoom=false; sceneMain.userspin=false;
+    sceneMain.center = vec(-40, 120, 0);
+    sceneMain.range  = 480;
+
+    const colorA = vec(0.5,0,0.1), colorB = color.orange;
+    table = box({ pos: vec(-40, TABLE_Y-6, 0), size: vec(1000, 12, 0.1), color: color.gray(0.45) });
+
+    const dA=dimsFor(mA), dB=dimsFor(mB);
+    A = box({ pos: vec(START_X + x, TABLE_Y + dA.H/2, 0), size: vec(dA.W, dA.H, 40), color: colorA });
+    B = box({ pos: vec(A.pos.x + (dA.W/2 + dB.W/2) + GAP, TABLE_Y + dB.H/2, 0), size: vec(dB.W, dB.H, 40), color: colorB });
+
+    // centered A/B letters
+    labelA_main = label({ pos:A.pos, text:"A", height:20, color:color.white, box:false, opacity:0 });
+    labelB_main = label({ pos:B.pos, text:"B", height:20, color:color.white, box:false, opacity:0 });
+
+    // main arrows/labels
+    pushArrow = arrow({ pos: vec(0,0,0), axis: vec(0,0,0), color: color.red,   shaftwidth: 10 });
+    nBAArrow  = arrow({ pos: vec(0,0,0), axis: vec(0,0,0), color: color.cyan,  shaftwidth: 8 }); // B→A (shown beneath B)
+    nABArrow  = arrow({ pos: vec(0,0,0), axis: vec(0,0,0), color: color.cyan,  shaftwidth: 8 }); // A→B (shown atop A)
+
+    pushLbl = label({ pos: vec(0,0,0), text:'', color: color.red,   height:13, box:false });
+    nBALbl  = label({ pos: vec(0,0,0), text:'', color: color.cyan,  height:13, box:false });
+    nABLbl  = label({ pos: vec(0,0,0), text:'', color: color.cyan,  height:13, box:false });
+
+    updateArrowsAndLabels(); // place arrows with current positions
+  }
+
+  // Apply current masses to sizes; keep current x displacement (don’t reset motion)
+  function applySizesKeepPositions(){
+    const dA=dimsFor(mA), dB=dimsFor(mB);
+    A.size = vec(dA.W, dA.H, 40);
+    B.size = vec(dB.W, dB.H, 40);
+    A.pos  = vec(START_X + x, TABLE_Y + dA.H/2, 0);
+    B.pos  = vec(A.pos.x + (dA.W/2 + dB.W/2) + GAP, TABLE_Y + dB.H/2, 0);
+    // keep centered letters on blocks
+    labelA_main.pos = A.pos; labelB_main.pos = B.pos;
+  }
+
+  // Only compute forces & place arrows/labels — do NOT change A.pos/B.pos here
+  function updateArrowsAndLabels(){
+    const N = N_AB();
+    const sPush = lenFromForce(Fp);
+    const sN    = lenFromForce(Math.abs(N));
+
+    // Push (tail left, tip at A's left face)
+    const tipL_A  = A.pos.x - A.size.x/2;
+    pushArrow.pos  = vec(tipL_A - sPush, A.pos.y, 0);
+    pushArrow.axis = vec(+sPush, 0, 0);
+    pushLbl.pos    = vec(tipL_A - sPush*0.5, A.pos.y - A.size.y*0.62, 0);
+    pushLbl.text   = `F_push = ${Fp.toFixed(1)} N`;
+
+    // A→B on top of A (→)
+    const topY_A = A.pos.y + A.size.y/2 + 6;
+    nABArrow.pos  = vec(A.pos.x - A.size.x*0.1, topY_A, 0);
+    nABArrow.axis = vec(+sN, 0, 0);
+    nABLbl.pos    = vec(A.pos.x + A.size.x*0.15, topY_A + 18, 0);
+    nABLbl.text   = `A→B = ${Math.abs(N).toFixed(1)} N`;
+
+    // B→A at bottom of B (←)
+    const botY_B = B.pos.y - B.size.y/2 - 6;
+    nBAArrow.pos  = vec(B.pos.x + B.size.x*0.1, botY_B, 0);
+    nBAArrow.axis = vec(-sN, 0, 0);
+    nBALbl.pos    = vec(B.pos.x - B.size.x*0.15, botY_B - 18, 0);
+    nBALbl.text   = `B→A = ${Math.abs(N).toFixed(1)} N`;
+
+    // toggles + letters
+    const showA = chkA.checked, showB = chkB.checked;
+    A.visible = pushArrow.visible = pushLbl.visible = nABArrow.visible = nABLbl.visible = showA;
+    labelA_main.visible = showA;
+
+    B.visible = nBAArrow.visible = nBALbl.visible = showB;
+    labelB_main.visible = showB;
+  }
+
+  // ----- FBD A (right-top) -----
+  function initFBD_A(){
+    const container = document.getElementById('fbdA');
+    container.innerHTML = '';
+    sceneFBD_A = createCanvasIn(container);
+    sceneFBD_A.autoscale=false; sceneFBD_A.userzoom=false; sceneFBD_A.userspin=false;
+    sceneFBD_A.center = vec(0, 0, 0);
+    sceneFBD_A.range  = 95;
+
+    Aghost   = box({ pos: vec(0,0,0), size: vec(90,70,1), opacity:0.30, color: vec(0.5,0,0.1) });
+    LA_letter= label({ pos: vec(0,0,0), text:"A", height:16, color:color.white, box:false });
+
+    FpushA = arrow({ pos: vec(0,0,0), axis: vec(0,0,0), color: color.red,   shaftwidth: 8 });
+    FbaA   = arrow({ pos: vec(0,0,0), axis: vec(0,0,0), color: color.cyan,  shaftwidth: 7 });
+    NA     = arrow({ pos: vec(0,35,0), axis: vec(0,0,0), color: color.green,  shaftwidth: 7 });
+    WtA    = arrow({ pos: vec(0,-35,0), axis: vec(0,0,0), color: color.yellow, shaftwidth: 7 });
+
+    LA_push = label({ pos: vec(-25,-48,0), text:'F_push', color: color.red,  height:11, box:false });
+    LA_ba   = label({ pos: vec( 25,-48,0), text:'B→A',   color: color.cyan, height:11, box:false });
+    LA_N    = label({ pos: vec(-50, 42,0), text:'N',     color: color.green,height:11, box:false });
+    LA_W    = label({ pos: vec( 50,-42,0), text:'mg',    color: color.yellow,height:11, box:false });
+
+    layoutFBD_A();
+  }
+
+  // ----- FBD B (right-bottom) -----
+  function initFBD_B(){
+    const container = document.getElementById('fbdB');
+    container.innerHTML = '';
+    sceneFBD_B = createCanvasIn(container);
+    sceneFBD_B.autoscale=false; sceneFBD_B.userzoom=false; sceneFBD_B.userspin=false;
+    sceneFBD_B.center = vec(0, 0, 0);
+    sceneFBD_B.range  = 95;
+
+    Bghost   = box({ pos: vec(0,0,0), size: vec(86,66,1), opacity:0.30, color: color.orange });
+    LB_letter= label({ pos: vec(0,0,0), text:"B", height:16, color:color.white, box:false });
+
+    FabB = arrow({ pos: vec(0,0,0), axis: vec(0,0,0), color: color.cyan,  shaftwidth: 7 });
+    NB   = arrow({ pos: vec(0,33,0), axis: vec(0,0,0), color: color.green,  shaftwidth: 7 });
+    WtB  = arrow({ pos: vec(0,-33,0), axis: vec(0,0,0), color: color.yellow, shaftwidth: 7 });
+
+    LB_ab = label({ pos: vec(0,-46,0), text:'A→B', color: color.cyan,  height:11, box:false });
+    LB_N  = label({ pos: vec(-48,38,0), text:'N',   color: color.green, height:11, box:false });
+    LB_W  = label({ pos: vec( 48,-38,0), text:'mg', color: color.yellow, height:11, box:false });
+
+    layoutFBD_B();
+  }
+
+  // FBD layouts (don’t change main positions)
+  function layoutFBD_A(){
+    const show = chkA.checked;
+    [Aghost,FpushA,FbaA,NA,WtA,LA_push,LA_ba,LA_N,LA_W,LA_letter].forEach(o=>o.visible=show);
+    if(!show) return;
+
+    const N = N_AB();
+    const sPush = lenFromForce(Fp);
+    const sN    = lenFromForce(Math.abs(N));
+    const sV    = 95;
+
+    const faceL=-45, faceR=+45;
+    FpushA.pos  = vec(faceL - sPush, 0, 0);  FpushA.axis = vec(+sPush,0,0);
+    FbaA.pos    = vec(faceR + sN,   0, 0);   FbaA.axis   = vec(-sN,  0,0);
+    NA.axis     = vec(0, +sV, 0);
+    WtA.axis    = vec(0, -sV, 0);
+  }
+  function layoutFBD_B(){
+    const show = chkB.checked;
+    [Bghost,FabB,NB,WtB,LB_ab,LB_N,LB_W,LB_letter].forEach(o=>o.visible=show);
+    if(!show) return;
+
+    const N = N_AB();
+    const sN = lenFromForce(Math.abs(N));
+    const sV = 95;
+    const faceL=-43;
+
+    FabB.pos  = vec(faceL - sN, 0, 0);  FabB.axis = vec(+sN, 0, 0);
+    NB.axis   = vec(0, +sV, 0);
+    WtB.axis  = vec(0, -sV, 0);
+  }
+
+  function updateHUD(){
+    a = accel();
+    const N = N_AB();
+    FpLbl.textContent  = fmt(Fp,'N');
+    aLbl.textContent   = fmt(a,'m/s²');
+    NabLbl.textContent = fmt(Math.abs(N),'N');
+    NbaLbl.textContent = fmt(Math.abs(N),'N');
+    vLbl.textContent   = fmt(v,'m/s');
+    tLbl.textContent   = fmt(t,'s');
+  }
+
+  function updateAll(){
+    applySizesKeepPositions();   // keep current motion
+    updateArrowsAndLabels();
+    layoutFBD_A();
+    layoutFBD_B();
+    updateHUD();
+  }
+
+  // ---------- Animation ----------
+  let timer=null;
+  function step(){
+    a = accel();
+    v += a*DT;
+    x += v*DT;
+
+    // move blocks by x; DO NOT reset in arrow function
+    applySizesKeepPositions();
+    updateArrowsAndLabels();
+    layoutFBD_A();
+    layoutFBD_B();
+
+    t += DT;
+    updateHUD();
+  }
+
+  function play(){ stop(); timer=setInterval(step,20); }
+  function stop(){ if (timer){ clearInterval(timer); timer=null; } }
+  function reset(){ stop(); a=0; v=0; x=0; t=0; updateAll(); }
+
+  // ---------- Wiring ----------
+  function sync(slider, input, cb){
+    slider.addEventListener('input', e=>{ input.value=e.target.value; cb(parseFloat(e.target.value)); });
+    input.addEventListener('input',  e=>{ slider.value=e.target.value; cb(parseFloat(e.target.value)); });
+  }
+  sync(mAS, mAI, v=>{ mA=Math.max(0.5,Math.min(50,v||0)); updateAll(); });
+  sync(mBS, mBI, v=>{ mB=Math.max(0.5,Math.min(50,v||0)); updateAll(); });
+  sync(FpS, FpI, v=>{ Fp=Math.max(0,Math.min(500,v||0)); updateAll(); });
+
+  chkA.addEventListener('change', ()=>{ updateArrowsAndLabels(); layoutFBD_A(); });
+  chkB.addEventListener('change', ()=>{ updateArrowsAndLabels(); layoutFBD_B(); });
+
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', stop);
+  btnReset.addEventListener('click', reset);
+
+  // ---------- Boot ----------
+  function boot(){ initMain(); initFBD_A(); initFBD_B(); updateHUD(); }
+  let tries=0;
+  function safeBoot(){
+    try{ if (typeof window.canvas==='function' && typeof window.vec==='function'){ boot(); return; } }
+    catch(e){}
+    if (++tries<200) setTimeout(safeBoot,30);
+  }
+  window.addEventListener('load', safeBoot);
+})();
+</script>
+</body>
+</html>

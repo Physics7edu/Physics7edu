@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Vertical Block–Pulley–Person (Tension vs Weight)</title>
+  <title>Vertical Block–Pulley–Person</title>
 
   <!-- GlowScript / VPython -->
   <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
@@ -10,7 +10,6 @@
   <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
   <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
 
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <style>
     html,body{height:100%;margin:0;background:#0f172a;color:#e5e7eb;font-family:Inter,system-ui,sans-serif}
     .wrap{display:flex;height:100vh}
@@ -31,7 +30,7 @@
 <body>
 <div class="wrap">
   <div class="left">
-    <h1 class="text-lg font-extrabold mb-2">Vertical Block–Pulley–Person (Frictionless)</h1>
+    <h1 class="text-lg font-extrabold mb-2">Vertical Block–Pulley–Person</h1>
 
     <div class="card">
       <div class="label">Mass of block m (kg)</div>
@@ -46,11 +45,7 @@
         <input id="TInput"  type="number" min="0" max="600" step="5" value="120">
       </div>
 
-      <div class="label">Gravity g (m/s²)</div>
-      <div class="row">
-        <input id="gSlider" type="range" min="0" max="20" step="0.1" value="9.8">
-        <input id="gInput"  type="number" min="0" max="20" step="0.1" value="9.8">
-      </div>
+      <!-- gravity slider REMOVED -->
 
       <div class="row" style="gap:.5rem;margin-top:.5rem">
         <button id="btnPlay"  class="btn">Play</button>
@@ -67,9 +62,6 @@
       <div class="pair"><span>Velocity v</span><span id="vLbl">—</span></div>
       <div class="pair"><span>Displacement y</span><span id="yLbl">—</span></div>
       <div class="pair"><span>Time t</span><span id="tLbl">—</span></div>
-      <p class="text-xs text-gray-300 mt-2">
-        Model: ideal rope & pulley, no friction or pulley inertia. Upward is +y. \(a = T/m - g\).
-      </p>
     </div>
   </div>
 
@@ -84,32 +76,24 @@
   const $ = id => document.getElementById(id);
   const mS=$('mSlider'), mI=$('mInput');
   const TS=$('TSlider'), TI=$('TInput');
-  const gS=$('gSlider'), gI=$('gInput');
   const btnPlay=$('btnPlay'), btnPause=$('btnPause'), btnReset=$('btnReset');
   const aLbl=$('aLbl'), vLbl=$('vLbl'), yLbl=$('yLbl'), tLbl=$('tLbl'), bootWarn=$('bootWarn');
 
   // ====== State ======
-  let m=10;       // kg
-  let T=120;      // N
-  let g=9.8;      // m/s^2 (down)
-  let y=0, v=0;   // displacement from start (m), velocity (m/s), +y up
-  let t=0;        // s
+  let m=10, T=120, g=9.8;   // g is fixed
+  let y=0, v=0, t=0;
   const DT=0.02;
 
   // World/geometry
   const WORLD_X = 900, WORLD_Y = 560;
-
-  // >>> Increased gap: ceiling way up, floor way down
-  const BEAM_Y  = WORLD_Y*0.95;              // top beam y (was 0.82)
-  const FLOOR_Y = WORLD_Y*0.05;              // floor y     (was 0.08)
+  const BEAM_Y  = WORLD_Y*0.95;   // ceiling
+  const FLOOR_Y = WORLD_Y*0.05;   // floor
 
   const PULLEY_X = WORLD_X*0.55;
-  const PULLEY_R = 22;
+  const PULLEY_R = 44;            // 200% of original 22
 
   const BLOCK_W=80, BLOCK_H=60;
-  const BLOCK_X = PULLEY_X - PULLEY_R;
-
-  // >>> Block starts in the middle between floor and ceiling
+  const BLOCK_X = PULLEY_X - PULLEY_R;   // under left rim
   const START_BLOCK_Y = (FLOOR_Y + BEAM_Y) / 2;
 
   // VPython objects
@@ -117,16 +101,22 @@
   let ropeLeft=null, ropeTop=null, ropeRight=null;
   let TarrowUp=null, TarrowDown=null, Tlabel=null, Warrow=null, Wlabel=null;
 
-  // For rope length constraint
   let blockTopY0=null, handY0=null;
 
   // ====== Helpers ======
-  function fmt(v, u=''){
-    if (!isFinite(v)) return '—';
-    const s = Math.abs(v)>=1000 ? v.toFixed(0) : v.toFixed(2);
-    return s + (u ? ` ${u}` : '');
-  }
+  function fmt(v,u=''){ if(!isFinite(v)) return '—'; return v.toFixed(2)+(u?` ${u}`:''); }
   function aNow(){ return (m>0 ? (T/m) - g : 0); }
+  function blockTopY(){ return block.pos.y + BLOCK_H/2; }
+  function clamp(val,min,max){ return Math.max(min, Math.min(max, val)); }
+
+  function semicirclePoints(cx, cy, r, n=24){
+    const pts=[];
+    for(let i=0;i<=n;i++){
+      const th=Math.PI - (Math.PI*i/n);
+      pts.push(vec(cx + r*Math.cos(th), cy + r*Math.sin(th), 0));
+    }
+    return pts;
+  }
 
   // ====== Scene ======
   function initScene(){
@@ -134,8 +124,6 @@
     container.innerHTML='';
     if (typeof window.__context !== 'undefined') delete window.__context;
     window.__context = { glowscript_container: container };
-
-    if (typeof window.canvas !== 'function') throw new Error('GlowScript not loaded');
 
     scene = canvas({ width: container.clientWidth||960, height: container.clientHeight||520, background: color.black });
     scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
@@ -146,126 +134,106 @@
     floor = box({ pos: vec(WORLD_X/2, FLOOR_Y-4, 0), size: vec(WORLD_X, 8, 0.1), color: color.gray(0.4) });
     beam  = box({ pos: vec(WORLD_X/2, BEAM_Y+4, 0), size: vec(WORLD_X*0.9, 8, 0.1), color: color.gray(0.5) });
 
-    // Pulley
-    pulley = ring({ pos: vec(PULLEY_X, BEAM_Y - 4, 0), axis: vec(0,0,1), radius: PULLEY_R, thickness: 4, color: color.yellow });
-
-    // Block (start in middle)
+    pulley = ring({ pos: vec(PULLEY_X, BEAM_Y - 4, 0), axis: vec(0,0,1), radius: PULLEY_R, thickness: 6, color: color.yellow });
     block = box({ pos: vec(BLOCK_X, START_BLOCK_Y, 0), size: vec(BLOCK_W, BLOCK_H, 40), color: color.orange });
 
-    // Person & hand at right
-    const px = PULLEY_X + 120;
-    person = cylinder({ pos: vec(px, FLOOR_Y, 0), axis: vec(0, 100, 0), radius: 7, color: color.gray(0.8) });
-    hand   = sphere({ pos: vec(px, START_BLOCK_Y, 0), radius: 6.5, color: color.cyan });
+    const pullX = PULLEY_X + PULLEY_R;
+    person = cylinder({ pos: vec(pullX, FLOOR_Y, 0), axis: vec(0, 100, 0), radius: 7, color: color.gray(0.8) });
+    hand   = sphere({ pos: vec(pullX, START_BLOCK_Y, 0), radius: 6.5, color: color.cyan });
 
-    // Rope: left vertical, small top over pulley, right vertical
-    ropeLeft = curve({ pos:[vec(BLOCK_X, blockTopY(), 0), vec(PULLEY_X - PULLEY_R, pulley.pos.y, 0)],
-                       color: color.white, radius: 1.2 });
-    ropeTop  = curve({ pos:[vec(PULLEY_X - PULLEY_R, pulley.pos.y, 0), vec(PULLEY_X + PULLEY_R, pulley.pos.y, 0)],
-                       color: color.white, radius: 1.2 });
-    ropeRight= curve({ pos:[vec(PULLEY_X + PULLEY_R, pulley.pos.y, 0), hand.pos],
-                       color: color.white, radius: 1.2 });
+    ropeLeft  = curve({ color: color.white, radius: 1.2 });
+    ropeTop   = curve({ color: color.white, radius: 1.2 });
+    ropeRight = curve({ color: color.white, radius: 1.2 });
 
-    // Force arrows
-    TarrowUp   = arrow({ pos: vec(BLOCK_X + BLOCK_W*0.55, block.pos.y + BLOCK_H*0.25, 0), axis: vec(0,0,0), color: color.red,   shaftwidth: 5 });
-    Warrow     = arrow({ pos: vec(BLOCK_X - BLOCK_W*0.55, block.pos.y + BLOCK_H*0.25, 0), axis: vec(0,0,0), color: color.cyan, shaftwidth: 5 });
-    TarrowDown = arrow({ pos: vec(hand.pos.x + 20, pulley.pos.y - 8, 0), axis: vec(0,0,0), color: color.red,   shaftwidth: 5 });
+    TarrowUp   = arrow({ pos: vec(BLOCK_X + BLOCK_W*0.55, block.pos.y, 0), axis: vec(0,0,0), color: color.red,   shaftwidth: 5 });
+    Warrow     = arrow({ pos: vec(BLOCK_X - BLOCK_W*0.55, block.pos.y, 0), axis: vec(0,0,0), color: color.cyan, shaftwidth: 5 });
+    TarrowDown = arrow({ pos: vec(pullX + 16, pulley.pos.y - 8, 0), axis: vec(0,0,0), color: color.red,   shaftwidth: 5 });
 
-    Tlabel = label({ pos: vec(hand.pos.x + 70, pulley.pos.y + 16, 0), text: '', color: color.red, height: 14, box:false });
+    Tlabel = label({ pos: vec(pullX + 60, pulley.pos.y + 16, 0), text: '', color: color.red, height: 14, box:false });
     Wlabel = label({ pos: vec(BLOCK_X - 70, block.pos.y - 10, 0), text: '', color: color.cyan, height: 14, box:false });
 
-    // Set rope constraint reference
     blockTopY0 = blockTopY();
     handY0     = hand.pos.y;
 
-    // Initial sizing
-    updateRopeAndForces();
+    updateRopeAndForces(true);
     updateHUD();
   }
 
-  function blockTopY(){ return block.pos.y + BLOCK_H/2; }
-
-  function updateRopeAndForces(){
-    // Rope constraint: hand.y = handY0 - (blockTopY - blockTopY0)
-    const topL = vec(PULLEY_X - PULLEY_R, pulley.pos.y, 0);
-    const topR = vec(PULLEY_X + PULLEY_R, pulley.pos.y, 0);
-
+  function updateRopeAndForces(first=false){
+    const pullX = PULLEY_X + PULLEY_R;
     const bTopY = blockTopY();
     const dY = (bTopY - blockTopY0);
-    hand.pos = vec(hand.pos.x, handY0 - dY, 0);
 
-    // Update rope geometry
-    ropeLeft.modify(0, vec(BLOCK_X, bTopY, 0));
-    ropeLeft.modify(1, topL);
-    ropeTop.modify(0, topL);
-    ropeTop.modify(1, topR);
-    ropeRight.modify(0, topR);
-    ropeRight.modify(1, hand.pos);
+    const handMin = FLOOR_Y + 10;
+    const handMax = BEAM_Y - 10;
+    let nextHandY = handY0 - dY;
+    nextHandY = clamp(nextHandY, handMin, handMax);
+    hand.pos = vec(pullX, nextHandY, 0);
 
-    // Force arrows scale
+    const topLimit    = (pulley.pos.y - PULLEY_R) - (BLOCK_H/2 + 6);
+    const bottomLimit = FLOOR_Y + BLOCK_H/2;
+    if (block.pos.y > topLimit)  block.pos.y = topLimit;
+    if (block.pos.y < bottomLimit) block.pos.y = bottomLimit;
+
+    const leftContact  = vec(PULLEY_X - PULLEY_R, pulley.pos.y, 0);
+    const rightContact = vec(PULLEY_X + PULLEY_R, pulley.pos.y, 0);
+
+    ropeLeft.clear(); ropeLeft.append(vec(BLOCK_X, blockTopY(), 0)); ropeLeft.append(leftContact);
+
+    const pts = semicirclePoints(pulley.pos.x, pulley.pos.y, PULLEY_R, 28);
+    ropeTop.clear(); for (const p of pts){ ropeTop.append(p); }
+
+    ropeRight.clear(); ropeRight.append(rightContact); ropeRight.append(hand.pos);
+
     const sT = Math.min(220, Math.max(0, T) * 0.5);
     const sW = Math.min(220, Math.max(0, m*g) * 0.5);
 
-    TarrowUp.pos  = vec(BLOCK_X + BLOCK_W*0.55, block.pos.y + BLOCK_H*0.05, 0);
-    TarrowUp.axis = vec(0, +sT, 0);
-
-    Warrow.pos    = vec(BLOCK_X - BLOCK_W*0.55, block.pos.y + BLOCK_H*0.55, 0);
-    Warrow.axis   = vec(0, -sW, 0);
-
-    TarrowDown.pos  = vec(hand.pos.x + 20, pulley.pos.y - 8, 0);
+    TarrowUp.axis  = vec(0, +sT, 0);
+    Warrow.axis    = vec(0, -sW, 0);
     TarrowDown.axis = vec(0, -sT, 0);
 
     Tlabel.text = `T = ${T.toFixed(1)} N`;
     Wlabel.text = `mg = ${(m*g).toFixed(1)} N`;
+
+    if (first){ blockTopY0 = blockTopY(); handY0 = hand.pos.y; }
   }
 
   function updateHUD(){
     aLbl.textContent = fmt(aNow(), 'm/s²');
     vLbl.textContent = fmt(v, 'm/s');
-    yLbl.textContent = fmt(y, 'm'); // displacement from start
+    yLbl.textContent = fmt(y, 'm');
     tLbl.textContent = fmt(t, 's');
   }
 
   function clampAtLimits(){
-    // Top: block top cannot go above pulley bottom minus small gap
     const topLimit = (pulley.pos.y - PULLEY_R) - (BLOCK_H/2 + 6);
-    if (block.pos.y > topLimit){ block.pos.y = topLimit; v = 0; return true; }
-    // Bottom: block bottom cannot go below floor
     const bottomLimit = FLOOR_Y + BLOCK_H/2;
-    if (block.pos.y < bottomLimit){ block.pos.y = bottomLimit; v = 0; return true; }
-    return false;
+    let hit=false;
+    if (block.pos.y > topLimit){ block.pos.y = topLimit; v = 0; hit=true; }
+    if (block.pos.y < bottomLimit){ block.pos.y = bottomLimit; v = 0; hit=true; }
+    return hit;
   }
 
   // ====== Animation ======
   let animTimer=null;
   function step(){
-    if (!block) return;
-
     const a = aNow();
     v += a * DT;
     y += v * DT;
     block.pos.y = START_BLOCK_Y + y;
-
     const hit = clampAtLimits();
     updateRopeAndForces();
-
-    t += DT;
-    updateHUD();
-
+    t += DT; updateHUD();
     if (hit) stop();
   }
 
   function play(){ stop(); animTimer=setInterval(step, 20); }
   function stop(){ if (animTimer){ clearInterval(animTimer); animTimer=null; } }
   function reset(){
-    stop();
-    y=0; v=0; t=0;
-    if (!block) return;
+    stop(); y=0; v=0; t=0;
     block.pos.y = START_BLOCK_Y;
-    // reset rope reference
-    blockTopY0 = blockTopY();
-    handY0     = hand.pos.y;
-    updateRopeAndForces();
-    updateHUD();
+    blockTopY0 = blockTopY(); handY0 = hand.pos.y;
+    updateRopeAndForces(true); updateHUD();
   }
 
   // ====== Wiring ======
@@ -276,25 +244,20 @@
 
   sync(mS, mI, val=>{ m = Math.max(0.5, Math.min(50, val||0)); updateRopeAndForces(); updateHUD(); });
   sync(TS, TI, val=>{ T = Math.max(0, Math.min(600, val||0));  updateRopeAndForces(); updateHUD(); });
-  sync(gS, gI, val=>{ g = Math.max(0, Math.min(20, val||0));   updateRopeAndForces(); updateHUD(); });
 
   btnPlay.addEventListener('click', play);
   btnPause.addEventListener('click', stop);
   btnReset.addEventListener('click', reset);
 
-  // ====== Robust boot ======
+  // ====== Boot ======
   let tries=0;
   function safeBoot(){
     try{
       if (typeof window.canvas==='function' && typeof window.vec==='function'){
-        bootWarn.style.display='none';
-        initScene();
-        updateHUD();
-        return;
+        bootWarn.style.display='none'; initScene(); return;
       }
     }catch(e){}
-    tries++;
-    bootWarn.style.display='block';
+    tries++; bootWarn.style.display='block';
     if (tries<200) setTimeout(safeBoot, 30);
     else bootWarn.textContent = 'Failed to load GlowScript. Check network/content blocker and reload.';
   }

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Two Blocks – both strands vertical (rope +50%)</title>
+
+  <!-- GlowScript / VPython -->
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery.min.js"></script>
+  <script src="https://www.glowscript.org/lib/jquery/2.1/jquery-ui.custom.min.js"></script>
+  <script src="https://www.glowscript.org/package/glow.3.2.min.js"></script>
+  <script src="https://www.glowscript.org/package/RSrun.3.2.min.js"></script>
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    html,body{height:100%;margin:0;background:#0f172a;color:#e5e7eb;font-family:Inter,system-ui,sans-serif}
+    .wrap{display:flex;height:100vh}
+    .left{width:24rem;padding:1rem;background:#111827;overflow:auto;border-right:1px solid #1f2937}
+    .card{background:#1f2937;border-radius:.7rem;padding:.8rem;box-shadow:0 6px 14px rgba(0,0,0,.35);margin-bottom:.8rem}
+    .label{font-weight:800;margin:.2rem 0 .4rem}
+    .row{display:flex;gap:.6rem;align-items:center}
+    .row>*{flex:1}
+    input[type=number]{color:#111827;padding:.35rem;border-radius:.4rem}
+    .btn{background:#2563eb;color:#fff;border:none;border-radius:.45rem;font-weight:800;padding:.5rem 0}
+    .btn:hover{background:#1d4ed8}
+    .pair{display:flex;justify-content:space-between;font-weight:800;margin:.18rem 0}
+    .pair span:last-child{color:#facc15}
+    .right{flex:1;display:flex}
+    #glowscript{flex:1}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <h1 class="text-lg font-extrabold mb-2">Two Blocks (vertical strands, rope +50%)</h1>
+
+    <div class="card">
+      <div class="label">Left mass m₁ (kg)</div>
+      <div class="row">
+        <input id="m1Slider" type="range" min="0.5" max="50" step="0.5" value="10">
+        <input id="m1Input"  type="number" min="0.5" max="50" step="0.5" value="10">
+      </div>
+
+      <div class="label">Right mass m₂ (kg)</div>
+      <div class="row">
+        <input id="m2Slider" type="range" min="0.5" max="50" step="0.5" value="12">
+        <input id="m2Input"  type="number" min="0.5" max="50" step="0.5" value="12">
+      </div>
+
+      <!-- Gravity and pulley radius controls removed (g fixed to 9.8, R fixed to 120) -->
+
+      <div class="row" style="gap:.5rem;margin-top:.5rem">
+        <button id="btnPlay"  class="btn">Play</button>
+        <button id="btnPause" class="btn">Pause</button>
+        <button id="btnReset" class="btn">Reset</button>
+      </div>
+      <p class="text-xs text-gray-300 mt-2">
+        .
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="pair"><span>Tension (both sides)</span><span id="Tlbl">—</span></div>
+      <div class="pair"><span>a₁ (left, +up)</span><span id="a1Lbl">—</span></div>
+      <div class="pair"><span>a₂ (right, +up)</span><span id="a2Lbl">—</span></div>
+      <div class="pair"><span>v₁</span><span id="v1Lbl">—</span></div>
+      <div class="pair"><span>v₂</span><span id="v2Lbl">—</span></div>
+      <div class="pair"><span>y₁</span><span id="y1Lbl">—</span></div>
+      <div class="pair"><span>y₂</span><span id="y2Lbl">—</span></div>
+      <div class="pair"><span>t</span><span id="tLbl">—</span></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div id="glowscript"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ====== DOM ======
+  const $ = id => document.getElementById(id);
+  const m1S=$('m1Slider'), m1I=$('m1Input');
+  const m2S=$('m2Slider'), m2I=$('m2Input');
+  const btnPlay=$('btnPlay'), btnPause=$('btnPause'), btnReset=$('btnReset');
+
+  const Tlbl=$('Tlbl'), a1Lbl=$('a1Lbl'), a2Lbl=$('a2Lbl'),
+        v1Lbl=$('v1Lbl'), v2Lbl=$('v2Lbl'), y1Lbl=$('y1Lbl'), y2Lbl=$('y2Lbl'), tLbl=$('tLbl');
+
+  // ====== State (g & R fixed) ======
+  let m1=10, m2=12;
+  const g = 9.8;      // fixed gravity
+  const R = 120;      // fixed pulley radius (px)
+
+  let y=0, v=0, t=0;  // displacement/velocity of left block (+up)
+  const DT=0.02;
+  const ROPE_GAIN = 1.5;     // +50%
+
+  // ====== World/geometry ======
+  const WORLD_X = 1200, WORLD_Y = 900;
+  const BEAM_Y  = WORLD_Y*0.97;
+  const FLOOR_Y = WORLD_Y*0.03;
+  const PULLEY_X = WORLD_X*0.50;
+
+  const BLOCK_W=80, BLOCK_H=60;
+
+  // x positions under pulley rims
+  const leftX  = () => PULLEY_X - R;
+  const rightX = () => PULLEY_X + R;
+  const topAnchorY = () => (BEAM_Y-4) - R; // pulley center minus radius
+  const MID_Y_BASE = (FLOOR_Y + BEAM_Y)/2;
+
+  // start Y so vertical rope = 1.5 × baseline
+  function calcStartY(){
+    const yTop  = topAnchorY();
+    const L0    = yTop - (MID_Y_BASE + BLOCK_H/2);
+    const Lnew  = L0 * ROPE_GAIN;
+    let yStart  = yTop - BLOCK_H/2 - Lnew;
+    const topLimit    = yTop - (BLOCK_H/2 + 10);
+    const bottomLimit = FLOOR_Y + BLOCK_H/2;
+    if (yStart > topLimit)    yStart = topLimit;
+    if (yStart < bottomLimit) yStart = bottomLimit;
+    return yStart;
+  }
+
+  // Physics helpers
+  function fmt(v,u=''){ if(!isFinite(v)) return '—'; const s=(Math.abs(v)>=1000)?v.toFixed(0):v.toFixed(2); return s+(u?` ${u}`:''); }
+  function accel(){ return (m1+m2>0) ? ((m2-m1)*g/(m1+m2)) : 0; }  // +up for left
+  function tension(){ const a=accel(); return Math.max(0, m1*(g+a)); }
+
+  // VPython objects & start Y
+  let scene, floor, beam, pulley;
+  let bL, bR, ropeL, ropeTop, ropeR;
+  let TarrL, TarrR, WarrL, WarrR, TtextL, TtextR, WtextL, WtextR;
+  let START_Y=null;
+
+  function initScene(){
+    const container=document.getElementById('glowscript');
+    container.innerHTML='';
+    if (typeof window.__context!=='undefined') delete window.__context;
+    window.__context = { glowscript_container: container };
+    if (typeof window.canvas!=='function') throw new Error('GlowScript not loaded');
+
+    scene = canvas({ width: container.clientWidth||1100, height: container.clientHeight||720, background: color.black });
+    scene.autoscale=false; scene.userzoom=false; scene.userspin=false;
+    scene.center = vec(WORLD_X/2, WORLD_Y/2, 0);
+    scene.range  = Math.max(WORLD_X/2, WORLD_Y/2) * 1.06;
+
+    floor = box({ pos: vec(WORLD_X/2, FLOOR_Y-4, 0), size: vec(WORLD_X, 8, 0.1), color: color.gray(0.4) });
+    beam  = box({ pos: vec(WORLD_X/2, BEAM_Y+4, 0), size: vec(WORLD_X*0.92, 8, 0.1), color: color.gray(0.5) });
+
+    pulley = ring({ pos: vec(PULLEY_X, BEAM_Y-4, 0), axis: vec(0,0,1), radius: R, thickness: 4, color: color.yellow });
+
+    START_Y = calcStartY();
+
+    bL = box({ pos: vec(leftX(),  START_Y, 0), size: vec(BLOCK_W, BLOCK_H, 40), color: color.orange });
+    bR = box({ pos: vec(rightX(), START_Y, 0), size: vec(BLOCK_W, BLOCK_H, 40), color: color.orange });
+
+    ropeL  = curve({ pos:[vec(leftX(),  bL.pos.y + BLOCK_H/2, 0), vec(PULLEY_X - R, pulley.pos.y, 0)],
+                     color: color.white, radius: 1.2 });
+    ropeTop= curve({ pos:[vec(PULLEY_X - R, pulley.pos.y, 0), vec(PULLEY_X + R, pulley.pos.y, 0)],
+                     color: color.white, radius: 1.2 });
+    ropeR  = curve({ pos:[vec(PULLEY_X + R, pulley.pos.y, 0), vec(rightX(), bR.pos.y + BLOCK_H/2, 0)],
+                     color: color.white, radius: 1.2 });
+
+    TarrL = arrow({ pos: vec(bL.pos.x + BLOCK_W*0.55, bL.pos.y + BLOCK_H*0.05, 0), axis: vec(0,0,0), color: color.red,   shaftwidth:5 });
+    WarrL = arrow({ pos: vec(bL.pos.x - BLOCK_W*0.55, bL.pos.y + BLOCK_H*0.55, 0), axis: vec(0,0,0), color: color.cyan, shaftwidth:5 });
+    TarrR = arrow({ pos: vec(bR.pos.x + BLOCK_W*0.55, bR.pos.y + BLOCK_H*0.05, 0), axis: vec(0,0,0), color: color.red,   shaftwidth:5 });
+    WarrR = arrow({ pos: vec(bR.pos.x - BLOCK_W*0.55, bR.pos.y + BLOCK_H*0.55, 0), axis: vec(0,0,0), color: color.cyan, shaftwidth:5 });
+
+    TtextL = label({ pos: vec(bL.pos.x + 60, bL.pos.y + 90, 0), text:'', color: color.red,  height:14, box:false });
+    TtextR = label({ pos: vec(bR.pos.x + 60, bR.pos.y + 90, 0), text:'', color: color.red,  height:14, box:false });
+    WtextL = label({ pos: vec(bL.pos.x - 70, bL.pos.y - 10, 0), text:'', color: color.cyan, height:14, box:false });
+    WtextR = label({ pos: vec(bR.pos.x - 70, bR.pos.y - 10, 0), text:'', color: color.cyan, height:14, box:false });
+
+    updateRopeAndForces();
+    updateHUD();
+  }
+
+  function updateRopeAndForces(){
+    // Keep blocks under rims
+    bL.pos.x = leftX();
+    bR.pos.x = rightX();
+
+    const topL = vec(PULLEY_X - R, pulley.pos.y, 0);
+    const topR = vec(PULLEY_X + R, pulley.pos.y, 0);
+    ropeL.modify(0, vec(leftX(),  bL.pos.y + BLOCK_H/2, 0));
+    ropeL.modify(1, topL);
+    ropeTop.modify(0, topL);
+    ropeTop.modify(1, topR);
+    ropeR.modify(0, topR);
+    ropeR.modify(1, vec(rightX(), bR.pos.y + BLOCK_H/2, 0));
+
+    const T = tension();
+    const sT  = Math.min(260, Math.max(0,T)*0.5);
+    const sWL = Math.min(260, m1*g*0.5);
+    const sWR = Math.min(260, m2*g*0.5);
+
+    TarrL.pos  = vec(bL.pos.x + BLOCK_W*0.55, bL.pos.y + BLOCK_H*0.05, 0);
+    TarrL.axis = vec(0, +sT, 0);
+    WarrL.pos  = vec(bL.pos.x - BLOCK_W*0.55, bL.pos.y + BLOCK_H*0.55, 0);
+    WarrL.axis = vec(0, -sWL, 0);
+
+    TarrR.pos  = vec(bR.pos.x + BLOCK_W*0.55, bR.pos.y + BLOCK_H*0.05, 0);
+    TarrR.axis = vec(0, +sT, 0);
+    WarrR.pos  = vec(bR.pos.x - BLOCK_W*0.55, bR.pos.y + BLOCK_H*0.55, 0);
+    WarrR.axis = vec(0, -sWR, 0);
+
+    TtextL.pos = vec(bL.pos.x + 60, bL.pos.y + 90, 0);
+    TtextR.pos = vec(bR.pos.x + 60, bR.pos.y + 90, 0);
+    WtextL.pos = vec(bL.pos.x - 70, bL.pos.y - 10, 0);
+    WtextR.pos = vec(bR.pos.x - 70, bR.pos.y - 10, 0);
+
+    TtextL.text = `T₁ = ${T.toFixed(1)} N`;
+    TtextR.text = `T₂ = ${T.toFixed(1)} N`;
+    WtextL.text = `m₁g = ${(m1*g).toFixed(1)} N`;
+    WtextR.text = `m₂g = ${(m2*g).toFixed(1)} N`;
+  }
+
+  function updateHUD(){
+    const a = accel();       // +up for left
+    const v2 = -v,  y2 = -y;
+    Tlbl.textContent  = fmt(tension(), 'N');
+    a1Lbl.textContent = fmt(a, 'm/s²');
+    a2Lbl.textContent = fmt(-a, 'm/s²');
+    v1Lbl.textContent = fmt(v, 'm/s');
+    v2Lbl.textContent = fmt(v2, 'm/s');
+    y1Lbl.textContent = fmt(y, 'm');
+    y2Lbl.textContent = fmt(y2, 'm');
+    tLbl.textContent  = fmt(t, 's');
+  }
+
+  function clampAtLimits(){
+    const yTop = topAnchorY();
+    const topLimit = yTop - (BLOCK_H/2 + 10);
+    const bottomLimit = FLOOR_Y + BLOCK_H/2;
+    let hit=false;
+    if (bL.pos.y > topLimit){ bL.pos.y = topLimit; hit=true; }
+    if (bR.pos.y > topLimit){ bR.pos.y = topLimit; hit=true; }
+    if (bL.pos.y < bottomLimit){ bL.pos.y = bottomLimit; hit=true; }
+    if (bR.pos.y < bottomLimit){ bR.pos.y = bottomLimit; hit=true; }
+    if (hit) v=0;
+    return hit;
+  }
+
+  // ====== Animation ======
+  let timer=null;
+  function step(){
+    const a = accel();
+    v += a * DT;
+    y += v * DT;
+
+    bL.pos.y = START_Y + y;
+    bR.pos.y = START_Y - y;
+
+    const hit = clampAtLimits();
+    updateRopeAndForces();
+
+    t += DT;
+    updateHUD();
+    if (hit) stop();
+  }
+
+  function play(){ stop(); timer=setInterval(step, 20); }
+  function stop(){ if (timer){ clearInterval(timer); timer=null; } }
+  function reset(){
+    stop(); y=0; v=0; t=0;
+    START_Y = calcStartY();
+    bL.pos = vec(leftX(),  START_Y, 0);
+    bR.pos = vec(rightX(), START_Y, 0);
+    updateRopeAndForces(); updateHUD();
+  }
+
+  // Wiring
+  function sync(slider, input, cb){
+    slider.addEventListener('input', e=>{ input.value=e.target.value; cb(parseFloat(e.target.value)); });
+    input.addEventListener('input',  e=>{ slider.value=e.target.value; cb(parseFloat(e.target.value)); });
+  }
+  sync(m1S, m1I, val=>{ m1 = Math.max(0.5, Math.min(50, val||0)); updateRopeAndForces(); updateHUD(); });
+  sync(m2S, m2I, val=>{ m2 = Math.max(0.5, Math.min(50, val||0)); updateRopeAndForces(); updateHUD(); });
+
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', stop);
+  btnReset.addEventListener('click', reset);
+
+  // Boot
+  window.addEventListener('load', ()=>{
+    let tries=0;
+    (function boot(){
+      try{
+        if (typeof window.canvas==='function' && typeof window.vec==='function'){
+          initScene(); updateHUD(); return;
+        }
+      }catch(e){}
+      if (++tries<200) setTimeout(boot,30);
+    })();
+  });
+})();
+</script>
+</body>
+</html>
