@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>2D Vector Visualizer — Mobile Optimized</title>
+  <title>2D Vector Visualizer — Per-Vector Controls (Magnitude via checkbox)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root{ --bg:#f7f7f7; --card:#ffffff; --muted:#374151; }
@@ -10,11 +10,8 @@
     body { font-family: system-ui, -apple-system, Roboto, "Segoe UI", "Helvetica Neue", Arial; background:var(--bg); color:#111; margin:0; display:flex; justify-content:center; align-items:flex-start; padding:12px; box-sizing:border-box; overflow-x:hidden; }
     .container { width:100%; max-width:1200px; box-sizing:border-box; }
     .card { background:var(--card); border-radius:12px; padding:12px; box-shadow:0 8px 26px rgba(0,0,0,0.08); }
-
     .canvas-wrap{ width:100%; border-radius:8px; overflow:hidden; position:relative; }
-    /* desktop default height; on small screens we'll use viewport-based height */
     #scene{ display:block; width:100%; height:520px; background:transparent; touch-action:manipulation; }
-
     form { margin-top:12px; display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
     .col { display:flex; flex-direction:column; gap:8px; }
     .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -25,7 +22,6 @@
     button.secondary { background:#6b7280; }
     .note{ color:var(--muted); font-size:13px; margin-top:8px; }
 
-    /* MOBILE ADJUSTMENTS */
     @media (max-width:740px){
       #scene{ height:55vh !important; min-height:360px; }
       form{ flex-direction:column; align-items:stretch; }
@@ -39,9 +35,6 @@
       button{ min-height:56px; font-size:17px; }
       input[type=number]{ padding:14px; }
     }
-
-    .legend { display:flex; gap:12px; align-items:center; margin-top:8px; }
-    .swatch { width:18px; height:12px; border-radius:3px; }
   </style>
 </head>
 <body>
@@ -53,39 +46,40 @@
 
       <form id="vectorForm" onsubmit="return false;" role="group" aria-label="Vector controls">
         <div class="col" style="flex:1;">
-          <div class="row" role="group" aria-label="Point A controls"><strong>Point A</strong>
+          <div class="row" role="group" aria-label="Point A controls">
+            <strong>Point A</strong>
             <label style="margin-left:12px;">x:</label>
             <input type="number" id="x1" value="3" step="any" inputmode="decimal" pattern="[0-9\.\-]*" aria-label="Point A x">
             <label>y:</label>
             <input type="number" id="y1" value="4" step="any" inputmode="decimal" pattern="[0-9\.\-]*" aria-label="Point A y">
-            <label style="margin-left:12px;"><input type="checkbox" id="showA" checked aria-label="Show vector A"> show vector</label>
+
+            <button type="button" id="drawA" aria-label="Draw vector A">Draw A</button>
+
+            <label style="margin-left:6px;"><input type="checkbox" id="magAChk" aria-label="Show magnitude A"> Show |A|</label>
+
             <label style="margin-left:8px;"><input type="checkbox" id="axComp" aria-label="A X component"> X-Component</label>
             <label><input type="checkbox" id="ayComp" aria-label="A Y component"> Y-Component</label>
           </div>
 
-          <div class="row" role="group" aria-label="Point B controls"><strong>Point B</strong>
+          <div class="row" role="group" aria-label="Point B controls">
+            <strong>Point B</strong>
             <label style="margin-left:12px;">x:</label>
             <input type="number" id="x2" value="8" step="any" inputmode="decimal" pattern="[0-9\.\-]*" aria-label="Point B x">
             <label>y:</label>
             <input type="number" id="y2" value="6" step="any" inputmode="decimal" pattern="[0-9\.\-]*" aria-label="Point B y">
-            <label style="margin-left:12px;"><input type="checkbox" id="showB" checked aria-label="Show vector B"> show vector</label>
+
+            <button type="button" id="drawB" aria-label="Draw vector B">Draw B</button>
+
+            <label style="margin-left:6px;"><input type="checkbox" id="magBChk" aria-label="Show magnitude B"> Show |B|</label>
+
             <label style="margin-left:8px;"><input type="checkbox" id="bxComp" aria-label="B X component"> X-Component</label>
             <label><input type="checkbox" id="byComp" aria-label="B Y component"> Y-Component</label>
           </div>
 
           <div class="controls" role="group" aria-label="Actions">
-            <button type="button" id="drawButton" aria-label="Draw vectors">Draw Vector(s)</button>
-            <button type="button" id="magnitudeButton" class="secondary" aria-label="Show magnitudes">Show Magnitudes</button>
             <button type="button" id="resetButton" class="secondary" aria-label="Reset">Reset</button>
           </div>
 
-          <div class="legend">
-            <div class="swatch" style="background:#111827"></div><div>Axes / ticks</div>
-            <div class="swatch" style="background:#f59e0b"></div><div>Point A</div>
-            <div class="swatch" style="background:#8b5cf6"></div><div>Point B</div>
-          </div>
-
-          <div class="note">.</div>
         </div>
       </form>
     </div>
@@ -97,15 +91,23 @@
       const ctx = canvas.getContext('2d');
 
       // DOM
-      const x1Input = document.getElementById('x1'); const y1Input = document.getElementById('y1'); const showACheck = document.getElementById('showA'); const axComp = document.getElementById('axComp'); const ayComp = document.getElementById('ayComp');
-      const x2Input = document.getElementById('x2'); const y2Input = document.getElementById('y2'); const showBCheck = document.getElementById('showB'); const bxComp = document.getElementById('bxComp'); const byComp = document.getElementById('byComp');
-      const drawBtn = document.getElementById('drawButton'); const resetBtn = document.getElementById('resetButton'); const magBtn = document.getElementById('magnitudeButton');
+      const x1Input = document.getElementById('x1'); const y1Input = document.getElementById('y1'); const drawA = document.getElementById('drawA'); const magAChk = document.getElementById('magAChk'); const axComp = document.getElementById('axComp'); const ayComp = document.getElementById('ayComp');
+      const x2Input = document.getElementById('x2'); const y2Input = document.getElementById('y2'); const drawB = document.getElementById('drawB'); const magBChk = document.getElementById('magBChk'); const bxComp = document.getElementById('bxComp'); const byComp = document.getElementById('byComp');
+      const resetBtn = document.getElementById('resetButton');
 
+      // state: whether a vector has been drawn and should be shown statically
+      let vectorAComplete = false, vectorBComplete = false;
+      let magAShown = false, magBShown = false;
+
+      // colors
+      const A_COLOR = '#f59e0b';
+      const B_COLOR = '#8b5cf6';
+
+      // canvas sizing
       let canvasWidth = canvas.clientWidth, canvasHeight = canvas.clientHeight;
       function updateCanvasSize(){ const dpr = window.devicePixelRatio || 1; canvasWidth = canvas.clientWidth || 800; canvasHeight = canvas.clientHeight || 600; canvas.width = Math.max(1, Math.floor(canvasWidth * dpr)); canvas.height = Math.max(1, Math.floor(canvasHeight * dpr)); canvas.style.width = canvasWidth + 'px'; canvas.style.height = canvasHeight + 'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
       updateCanvasSize();
 
-      // performance settings based on screen size
       function isSmallScreen(){ return window.innerWidth <= 640; }
       function animationSettings(){ const small = isSmallScreen(); return { durationFactor: small ? 1.35 : 1.0, targetFPS: small ? 30 : 60 }; }
 
@@ -117,47 +119,71 @@
       function clear(){ ctx.clearRect(0,0,canvasWidth,canvasHeight); }
 
       function drawTriangle(at, dir, size){ ctx.beginPath(); const perp = { x: -dir.y, y: dir.x }; ctx.moveTo(at.x, at.y); ctx.lineTo(at.x - dir.x * size + perp.x * (size*0.4), at.y - dir.y * size + perp.y * (size*0.4)); ctx.lineTo(at.x - dir.x * size - perp.x * (size*0.4), at.y - dir.y * size - perp.y * (size*0.4)); ctx.closePath(); ctx.fill(); }
-
-      function drawAxes(t){ const axisWidth = Math.max(2, Math.round(Math.min(canvasWidth, canvasHeight) * 0.006)); ctx.lineWidth = axisWidth; ctx.strokeStyle = '#000'; ctx.fillStyle = '#000'; const leftX = t.cx - t.axisMax * t.scale; const rightX = t.cx + t.axisMax * t.scale; const topY = t.cy - t.axisMax * t.scale; const bottomY = t.cy + t.axisMax * t.scale; ctx.beginPath(); ctx.moveTo(leftX, t.cy); ctx.lineTo(rightX, t.cy); ctx.stroke(); ctx.beginPath(); ctx.moveTo(t.cx, topY); ctx.lineTo(t.cx, bottomY); ctx.stroke(); drawTriangle({x:rightX, y:t.cy}, {x:1,y:0}, axisWidth*3.5); drawTriangle({x:leftX, y:t.cy}, {x:-1,y:0}, axisWidth*3.5); drawTriangle({x:t.cx, y:topY}, {x:0,y:-1}, axisWidth*3.5); drawTriangle({x:t.cx, y:bottomY}, {x:0,y:1}, axisWidth*3.5); const step = t.tickStep; const n = t.perSide; ctx.font = `bold ${Math.max(10, Math.round(canvasWidth*0.01))}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = '#000'; for (let i = -n; i <= n; i++){ const val = i * step; const px = t.cx + val * t.scale; ctx.beginPath(); ctx.moveTo(px, t.cy - 6); ctx.lineTo(px, t.cy + 6); ctx.lineWidth = Math.max(1, Math.round(axisWidth/1.6)); ctx.stroke(); let labelText; if (val === 0) labelText = '0'; else if (i > 0) labelText = String(val); else labelText = (step === 1) ? String(Math.abs(val)) + "'" : String(val); if (px > 30 && px < canvasWidth - 30) ctx.fillText(labelText, px, t.cy + 8); } ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; for (let j = -n; j <= n; j++){ const val = j * step; const py = t.cy - val * t.scale; ctx.beginPath(); ctx.moveTo(t.cx - 6, py); ctx.lineTo(t.cx + 6, py); ctx.lineWidth = Math.max(1, Math.round(axisWidth/1.6)); ctx.stroke(); let labelText; if (val === 0) labelText = '0'; else if (j > 0) labelText = String(val); else labelText = (step === 1) ? String(Math.abs(val)) + "'" : String(val); if (py > 20 && py < canvasHeight - 20) ctx.fillText(labelText, t.cx - 8, py); } ctx.font = `bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText('O', t.cx + 6, t.cy - 6); ctx.textAlign = 'right'; ctx.fillText("X'", leftX + 24, t.cy - 8); ctx.textAlign = 'left'; ctx.fillText('X', rightX - 24, t.cy - 8); ctx.textAlign = 'center'; ctx.fillText('Y', t.cx + 18, topY + 20); ctx.fillText("Y'", t.cx + 18, bottomY - 20); return axisWidth; }
-
-      function drawPartialLine(a,b,progress,strokeWidth,color){ const px = a.x + (b.x - a.x) * progress; const py = a.y + (b.y - a.y) * progress; ctx.strokeStyle = color; ctx.lineWidth = strokeWidth; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(px,py); ctx.stroke(); }
       function drawArrowHead(at, direction, size, color){ const angle = Math.atan2(direction.y, direction.x); ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(at.x, at.y); ctx.lineTo(at.x - size * Math.cos(angle - Math.PI/6), at.y - size * Math.sin(angle - Math.PI/6)); ctx.lineTo(at.x - size * Math.cos(angle + Math.PI/6), at.y - size * Math.sin(angle + Math.PI/6)); ctx.closePath(); ctx.fill(); }
 
       function fmtSigned(n){ const num = Number(n); if (Number.isNaN(num)) return '0'; return (num >= 0 ? '+' + num : String(num)); }
 
-      // Animation helper with frame-throttling
-      function animateVector(x,y, options){ const { color='#111827', xCompFlag=true, yCompFlag=true, label='A' } = options; return new Promise((resolve)=>{ const settings = animationSettings(); const dur = Math.max(220, 800 * settings.durationFactor); const targetFPS = settings.targetFPS; const frameInterval = 1000 / targetFPS; const t = computeTransform(); const origin = toCanvas({x:0,y:0}, t); const dest = toCanvas({x:x,y:y}, t); const axisW = Math.max(2, Math.round(Math.min(canvasWidth, canvasHeight) * 0.006)); const vecW = axisW; const compW = Math.max(1, Math.round(vecW * 0.25)); const headSize = Math.max(8, Math.round(axisW * 2.5)); let lastFrame = 0; const start = performance.now(); function step(now){ if (!lastFrame) lastFrame = now; const elapsed = now - start; const p = Math.min(1, elapsed / dur); if (now - lastFrame >= frameInterval){ lastFrame = now; renderBase(); drawPartialLine(origin, dest, p, vecW, color); if (p >= 0.99){ drawArrowHead(dest, {x:dest.x-origin.x, y:dest.y-origin.y}, headSize, color); ctx.fillStyle='#000'; ctx.font = `bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='left'; ctx.fillText(`${label}(${x}, ${y})`, dest.x + 8, dest.y - 10); } }
-          if (p < 1) requestAnimationFrame(step); else {
-            // components sequentially
-            const compDur = Math.max(160, dur * 0.45);
-            (async function runComps(){ if (xCompFlag){ await new Promise(res=>{ let lastF2=0; const s = performance.now(); function s2(n2){ if (!lastF2) lastF2 = n2; const e2 = n2 - s; const pc = Math.min(1, e2/compDur); if (n2 - lastF2 >= frameInterval){ lastF2 = n2; renderBase(); ctx.lineWidth = vecW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(dest.x, dest.y); ctx.stroke(); drawArrowHead(dest, {x:dest.x-origin.x, y:dest.y-origin.y}, headSize, color); const cxS = toCanvas({x:0,y:y}, t); const cxE = toCanvas({x:x,y:y}, t); drawPartialLine(cxS, cxE, pc, compW, color); } if (pc<1) requestAnimationFrame(s2); else { // finalize and label
-                        ctx.lineWidth = compW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const mid = { x: (cxS.x+cxE.x)/2, y: (cxS.y+cxE.y)/2 }; ctx.fillStyle = color; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(fmtSigned(x), mid.x, mid.y - 6); res(); } } requestAnimationFrame(s2); }); }
-              if (yCompFlag){ await new Promise(res=>{ let lastF3=0; const s2t = performance.now(); function s3(n3){ if (!lastF3) lastF3 = n3; const e3 = n3 - s2t; const pc2 = Math.min(1, e3 / compDur); if (n3 - lastF3 >= frameInterval){ lastF3 = n3; renderBase(); ctx.lineWidth = vecW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(dest.x, dest.y); ctx.stroke(); drawArrowHead(dest, {x:dest.x-origin.x, y:dest.y-origin.y}, headSize, color); const cxS = toCanvas({x:0,y:y}, t); const cxE = toCanvas({x:x,y:y}, t); ctx.lineWidth = compW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const cyS = toCanvas({x:x,y:0}, t); const cyE = toCanvas({x:x,y:y}, t); drawPartialLine(cyS, cyE, pc2, compW, color); } if (pc2<1) requestAnimationFrame(s3); else { ctx.lineWidth = compW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(cyS.x,cyS.y); ctx.lineTo(cyE.x,cyE.y); ctx.stroke(); const mid = { x: (cyS.x+cyE.x)/2, y: (cyS.y+cyE.y)/2 }; ctx.fillStyle = color; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(fmtSigned(y), mid.x + 6, mid.y); res(); } } requestAnimationFrame(s3); }); }
-              resolve(); })(); } }
-        requestAnimationFrame(step);
-      }); }
+      // draw completed vectors/components/magnitudes
+      function drawStaticElements(t){
+        const axisW = Math.max(2, Math.round(Math.min(canvasWidth, canvasHeight) * 0.006));
+        const vecW = axisW; const compW = Math.max(1, Math.round(vecW * 0.25)); const headSize = Math.max(8, Math.round(axisW * 2.5));
+        const x1 = Number(x1Input.value), y1 = Number(y1Input.value);
+        const x2 = Number(x2Input.value), y2 = Number(y2Input.value);
+        const tLocal = t || computeTransform();
 
-      function renderBase(){ clear(); const t = computeTransform(); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvasWidth,canvasHeight); ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1; for (let i = -t.perSide; i <= t.perSide; i++){ const x = t.cx + i * t.tickStep * t.scale; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvasHeight); ctx.stroke(); } for (let j = -t.perSide; j <= t.perSide; j++){ const y = t.cy - j * t.tickStep * t.scale; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvasWidth,y); ctx.stroke(); } drawAxes(t); }
+        if (vectorAComplete){ const o = toCanvas({x:0,y:0}, tLocal); const v = toCanvas({x:x1,y:y1}, tLocal); ctx.strokeStyle = A_COLOR; ctx.lineWidth = vecW; ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y); ctx.stroke(); drawArrowHead(v, {x:v.x-o.x,y:v.y-o.y}, headSize, A_COLOR); ctx.fillStyle = '#000'; ctx.font = `bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='left'; ctx.fillText(`A(${x1}, ${y1})`, v.x+8, v.y-10);
+            if (axComp.checked){ const cxS = toCanvas({x:0,y:y1}, tLocal); const cxE = toCanvas({x:x1,y:y1}, tLocal); ctx.strokeStyle = A_COLOR; ctx.lineWidth = compW; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const mid = { x:(cxS.x+cxE.x)/2, y:(cxS.y+cxE.y)/2 }; ctx.fillStyle = A_COLOR; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(fmtSigned(x1), mid.x, mid.y - 6); }
+            if (ayComp.checked){ const cyS = toCanvas({x:x1,y:0}, tLocal); const cyE = toCanvas({x:x1,y:y1}, tLocal); ctx.strokeStyle = A_COLOR; ctx.lineWidth = compW; ctx.beginPath(); ctx.moveTo(cyS.x,cyS.y); ctx.lineTo(cyE.x,cyE.y); ctx.stroke(); const mid = { x:(cyS.x+cyE.x)/2, y:(cyS.y+cyE.y)/2 }; ctx.fillStyle = A_COLOR; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(fmtSigned(y1), mid.x + 6, mid.y); }
+        }
 
-      function drawStatic(){ renderBase(); const x1 = Number(x1Input.value), y1 = Number(y1Input.value), x2 = Number(x2Input.value), y2 = Number(y2Input.value); const t = computeTransform(); const axisW = Math.max(2, Math.round(Math.min(canvasWidth, canvasHeight) * 0.006)); const vecW = axisW; const compW = Math.max(1, Math.round(vecW * 0.25)); const headSize = Math.max(8, Math.round(axisW * 2.5)); if (showACheck.checked){ const o=toCanvas({x:0,y:0},t), v=toCanvas({x:x1,y:y1},t); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=vecW; ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y); ctx.stroke(); drawArrowHead(v,{x:v.x-o.x,y:v.y-o.y},headSize,'#f59e0b'); ctx.fillStyle='#000'; ctx.font=`bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='left'; ctx.fillText(`A(${x1}, ${y1})`, v.x+8, v.y-10); if (axComp.checked){ const cxS=toCanvas({x:0,y:y1},t), cxE=toCanvas({x:x1,y:y1},t); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=compW; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const mid={x:(cxS.x+cxE.x)/2,y:(cxS.y+cxE.y)/2}; ctx.fillStyle='#f59e0b'; ctx.font=`bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText(fmtSigned(x1), mid.x, mid.y - 6); } if (ayComp.checked){ const cyS=toCanvas({x:x1,y:0},t), cyE=toCanvas({x:x1,y:y1},t); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=compW; ctx.beginPath(); ctx.moveTo(cyS.x,cyS.y); ctx.lineTo(cyE.x,cyE.y); ctx.stroke(); const mid={x:(cyS.x+cyE.x)/2,y:(cyS.y+cyE.y)/2}; ctx.fillStyle='#f59e0b'; ctx.font=`bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(fmtSigned(y1), mid.x + 6, mid.y); } }
-        if (showBCheck.checked){ const o=toCanvas({x:0,y:0},t), v=toCanvas({x:x2,y:y2},t); ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=vecW; ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y); ctx.stroke(); drawArrowHead(v,{x:v.x-o.x,y:v.y-o.y},headSize,'#8b5cf6'); ctx.fillStyle='#000'; ctx.font=`bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='left'; ctx.fillText(`B(${x2}, ${y2})`, v.x+8, v.y-10); if (bxComp.checked){ const cxS=toCanvas({x:0,y:y2},t), cxE=toCanvas({x:x2,y:y2},t); ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=compW; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const mid={x:(cxS.x+cxE.x)/2,y:(cxS.y+cxE.y)/2}; ctx.fillStyle='#8b5cf6'; ctx.font=`bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText(fmtSigned(x2), mid.x, mid.y - 6); } if (byComp.checked){ const cyS=toCanvas({x:x2,y:0},t), cyE=toCanvas({x:x2,y:y2},t); ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=compW; ctx.beginPath(); ctx.moveTo(cyS.x,cyS.y); ctx.lineTo(cyE.x,cyE.y); ctx.stroke(); const mid={x:(cyS.x+cyE.x)/2,y:(cyS.y+cyE.y)/2}; ctx.fillStyle='#8b5cf6'; ctx.font=`bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(fmtSigned(y2), mid.x + 6, mid.y); } }
+        if (vectorBComplete){ const o = toCanvas({x:0,y:0}, tLocal); const v = toCanvas({x:x2,y:y2}, tLocal); ctx.strokeStyle = B_COLOR; ctx.lineWidth = vecW; ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y); ctx.stroke(); drawArrowHead(v, {x:v.x-o.x,y:v.y-o.y}, headSize, B_COLOR); ctx.fillStyle = '#000'; ctx.font = `bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='left'; ctx.fillText(`B(${x2}, ${y2})`, v.x+8, v.y-10);
+            if (bxComp.checked){ const cxS = toCanvas({x:0,y:y2}, tLocal); const cxE = toCanvas({x:x2,y:y2}, tLocal); ctx.strokeStyle = B_COLOR; ctx.lineWidth = compW; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const mid = { x:(cxS.x+cxE.x)/2, y:(cxS.y+cxE.y)/2 }; ctx.fillStyle = B_COLOR; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText(fmtSigned(x2), mid.x, mid.y - 6); }
+            if (byComp.checked){ const cyS = toCanvas({x:x2,y:0}, tLocal); const cyE = toCanvas({x:x2,y:y2}, tLocal); ctx.strokeStyle = B_COLOR; ctx.lineWidth = compW; ctx.beginPath(); ctx.moveTo(cyS.x,cyS.y); ctx.lineTo(cyE.x,cyE.y); ctx.stroke(); const mid = { x:(cyS.x+cyE.x)/2, y:(cyS.y+cyE.y)/2 }; ctx.fillStyle = B_COLOR; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(fmtSigned(y2), mid.x + 6, mid.y); }
+        }
+
+        // magnitudes if checkboxes are checked and vector drawn
+        const tLocal2 = tLocal || computeTransform();
+        if (magAShown && vectorAComplete){ const x1v = Number(x1Input.value), y1v = Number(y1Input.value); const mid = toCanvas({x:x1v/2, y:y1v/2}, tLocal2); ctx.fillStyle = A_COLOR; ctx.font = `${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='center'; ctx.fillText(`|A|=${Math.hypot(x1v,y1v).toFixed(2)}`, mid.x, mid.y - 14); }
+        if (magBShown && vectorBComplete){ const x2v = Number(x2Input.value), y2v = Number(y2Input.value); const mid = toCanvas({x:x2v/2, y:y2v/2}, tLocal2); ctx.fillStyle = B_COLOR; ctx.font = `${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='center'; ctx.fillText(`|B|=${Math.hypot(x2v,y2v).toFixed(2)}`, mid.x, mid.y - 14); }
       }
 
-      // handlers
-      let animating=false; drawBtn.addEventListener('click', async ()=>{ if (animating) return; animating=true; renderBase(); const x1=Number(x1Input.value), y1=Number(y1Input.value), x2=Number(x2Input.value), y2=Number(y2Input.value); if (showACheck.checked) await animateVector(x1,y1,{color:'#f59e0b', xCompFlag: axComp.checked, yCompFlag: ayComp.checked, label:'A'}); await new Promise(r=>setTimeout(r,120)); if (showBCheck.checked) await animateVector(x2,y2,{color:'#8b5cf6', xCompFlag: bxComp.checked, yCompFlag: byComp.checked, label:'B'}); animating=false; });
+      function drawAxes(t){ const axisWidth = Math.max(2, Math.round(Math.min(canvasWidth, canvasHeight) * 0.006)); ctx.lineWidth = axisWidth; ctx.strokeStyle = '#000'; ctx.fillStyle = '#000'; const leftX = t.cx - t.axisMax * t.scale; const rightX = t.cx + t.axisMax * t.scale; const topY = t.cy - t.axisMax * t.scale; const bottomY = t.cy + t.axisMax * t.scale; ctx.beginPath(); ctx.moveTo(leftX, t.cy); ctx.lineTo(rightX, t.cy); ctx.stroke(); ctx.beginPath(); ctx.moveTo(t.cx, topY); ctx.lineTo(t.cx, bottomY); ctx.stroke(); drawTriangle({x:rightX, y:t.cy}, {x:1,y:0}, axisWidth*3.5); drawTriangle({x:leftX, y:t.cy}, {x:-1,y:0}, axisWidth*3.5); drawTriangle({x:t.cx, y:topY}, {x:0,y:-1}, axisWidth*3.5); drawTriangle({x:t.cx, y:bottomY}, {x:0,y:1}, axisWidth*3.5); const step = t.tickStep; const n = t.perSide; ctx.font = `bold ${Math.max(10, Math.round(canvasWidth*0.01))}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = '#000'; for (let i = -n; i <= n; i++){ const val = i * step; const px = t.cx + val * t.scale; ctx.beginPath(); ctx.moveTo(px, t.cy - 6); ctx.lineTo(px, t.cy + 6); ctx.lineWidth = Math.max(1, Math.round(axisWidth/1.6)); ctx.stroke(); let labelText; if (val === 0) labelText = '0'; else if (i > 0) labelText = String(val); else labelText = (step === 1) ? String(Math.abs(val)) + "'" : String(val); if (px > 30 && px < canvasWidth - 30) ctx.fillText(labelText, px, t.cy + 8); } ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; for (let j = -n; j <= n; j++){ const val = j * step; const py = t.cy - val * t.scale; ctx.beginPath(); ctx.moveTo(t.cx - 6, py); ctx.lineTo(t.cx + 6, py); ctx.lineWidth = Math.max(1, Math.round(axisWidth/1.6)); ctx.stroke(); let labelText; if (val === 0) labelText = '0'; else if (j > 0) labelText = String(val); else labelText = (step === 1) ? String(Math.abs(val)) + "'" : String(val); if (py > 20 && py < canvasHeight - 20) ctx.fillText(labelText, t.cx - 8, py); } ctx.font = `bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText('O', t.cx + 6, t.cy - 6); ctx.textAlign = 'right'; ctx.fillText("X'", leftX + 24, t.cy - 8); ctx.textAlign = 'left'; ctx.fillText('X', rightX - 24, t.cy - 8); ctx.textAlign = 'center'; ctx.fillText('Y', t.cx + 18, topY + 20); ctx.fillText("Y'", t.cx + 18, bottomY - 20); return axisWidth; }
 
-      magBtn.addEventListener('click', ()=>{ drawStatic(); const x1=Number(x1Input.value), y1=Number(y1Input.value), x2=Number(x2Input.value), y2=Number(y2Input.value); const t=computeTransform(); if (showACheck.checked){ const mid=toCanvas({x:x1/2,y:y1/2},t); ctx.fillStyle='#ef4444'; ctx.font=`${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='center'; ctx.fillText(`|A|=${Math.hypot(x1,y1).toFixed(2)}`, mid.x, mid.y); } if (showBCheck.checked){ const mid=toCanvas({x:x2/2,y:y2/2},t); ctx.fillStyle='#ef4444'; ctx.font=`${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='center'; ctx.fillText(`|B|=${Math.hypot(x2,y2).toFixed(2)}`, mid.x, mid.y); } });
+      function renderBase(){ clear(); const t = computeTransform(); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvasWidth,canvasHeight); ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1; for (let i = -t.perSide; i <= t.perSide; i++){ const x = t.cx + i * t.tickStep * t.scale; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvasHeight); ctx.stroke(); } for (let j = -t.perSide; j <= t.perSide; j++){ const y = t.cy - j * t.tickStep * t.scale; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvasWidth,y); ctx.stroke(); } drawAxes(t); drawStaticElements(t); }
 
-      resetBtn.addEventListener('click', ()=>{ x1Input.value=''; y1Input.value=''; x2Input.value=''; y2Input.value=''; showACheck.checked=false; showBCheck.checked=false; axComp.checked=false; ayComp.checked=false; bxComp.checked=false; byComp.checked=false; clear(); renderBase(); });
+      function drawPartialLine(a,b,progress,strokeWidth,color){ const px = a.x + (b.x - a.x) * progress; const py = a.y + (b.y - a.y) * progress; ctx.strokeStyle = color; ctx.lineWidth = strokeWidth; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(px,py); ctx.stroke(); }
 
-      [x1Input,y1Input,x2Input,y2Input,showACheck,showBCheck,axComp,ayComp,bxComp,byComp].forEach(el=> el.addEventListener('change', ()=>{ if (!animating) drawStatic(); }));
+      function animateVector(x,y, options){ const { color='#111827', xCompFlag=true, yCompFlag=true, label='A' } = options; return new Promise((resolve)=>{ const settings = animationSettings(); const dur = Math.max(220, 800 * settings.durationFactor); const targetFPS = settings.targetFPS; const frameInterval = 1000 / targetFPS; const t = computeTransform(); const origin = toCanvas({x:0,y:0}, t); const dest = toCanvas({x:x,y:y}, t); const axisW = Math.max(2, Math.round(Math.min(canvasWidth, canvasHeight) * 0.006)); const vecW = axisW; const compW = Math.max(1, Math.round(vecW * 0.25)); const headSize = Math.max(8, Math.round(axisW * 2.5)); let lastFrame = 0; const start = performance.now(); function step(now){ if (!lastFrame) lastFrame = now; const elapsed = now - start; const p = Math.min(1, elapsed / dur); if (now - lastFrame >= frameInterval){ lastFrame = now; renderBase(); drawPartialLine(origin, dest, p, vecW, color); if (p >= 0.99){ drawArrowHead(dest, {x:dest.x-origin.x, y:dest.y-origin.y}, headSize, color); ctx.fillStyle='#000'; ctx.font = `bold ${Math.max(12, canvasWidth*0.012)}px system-ui`; ctx.textAlign='left'; ctx.fillText(`${label}(${x}, ${y})`, dest.x + 8, dest.y - 10); } } if (p < 1) requestAnimationFrame(step); else { const compDur = Math.max(160, dur * 0.45); (async function runComps(){ if (xCompFlag){ await new Promise(res=>{ let lastF2=0; const s = performance.now(); function s2(n2){ if (!lastF2) lastF2 = n2; const e2 = n2 - s; const pc = Math.min(1, e2/compDur); if (n2 - lastF2 >= frameInterval){ lastF2 = n2; renderBase(); ctx.lineWidth = vecW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(dest.x, dest.y); ctx.stroke(); drawArrowHead(dest, {x:dest.x-origin.x, y:dest.y-origin.y}, headSize, color); const cxS = toCanvas({x:0,y:y}, t); const cxE = toCanvas({x:x,y:y}, t); drawPartialLine(cxS, cxE, pc, compW, color); } if (pc<1) requestAnimationFrame(s2); else { ctx.lineWidth = compW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const mid = { x:(cxS.x+cxE.x)/2, y:(cxS.y+cxE.y)/2 }; ctx.fillStyle = color; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(fmtSigned(x), mid.x, mid.y - 6); res(); } } requestAnimationFrame(s2); }); } if (yCompFlag){ await new Promise(res=>{ let lastF3=0; const s2t = performance.now(); function s3(n3){ if (!lastF3) lastF3 = n3; const e3 = n3 - s2t; const pc2 = Math.min(1, e3 / compDur); if (n3 - lastF3 >= frameInterval){ lastF3 = n3; renderBase(); ctx.lineWidth = vecW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(dest.x, dest.y); ctx.stroke(); drawArrowHead(dest, {x:dest.x-origin.x, y:dest.y-origin.y}, headSize, color); const cxS = toCanvas({x:0,y:y}, t); const cxE = toCanvas({x:x,y:y}, t); ctx.lineWidth = compW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(cxS.x,cxS.y); ctx.lineTo(cxE.x,cxE.y); ctx.stroke(); const cyS = toCanvas({x:x,y:0}, t); const cyE = toCanvas({x:x,y:y}, t); drawPartialLine(cyS, cyE, pc2, compW, color); } if (pc2<1) requestAnimationFrame(s3); else { ctx.lineWidth = compW; ctx.strokeStyle = color; ctx.beginPath(); ctx.moveTo(cyS.x,cyS.y); ctx.lineTo(cyE.x,cyE.y); ctx.stroke(); const mid = { x:(cyS.x+cyE.x)/2, y:(cyS.y+cyE.y)/2 }; ctx.fillStyle = color; ctx.font = `bold ${Math.max(11, canvasWidth*0.01)}px system-ui`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(fmtSigned(y), mid.x + 6, mid.y); res(); } } requestAnimationFrame(s3); }); } if (label === 'A') vectorAComplete = true; if (label === 'B') vectorBComplete = true; resolve(); })(); } } requestAnimationFrame(step); }); }
 
-      // resize
-      let resizeTimeout=null; function resizeAndRender(){ updateCanvasSize(); if (resizeTimeout) clearTimeout(resizeTimeout); resizeTimeout=setTimeout(()=>{ drawStatic(); resizeTimeout=null; }, 60); }
+      // when magnitude checkboxes change, toggle shown flag and redraw
+      magAChk.addEventListener('change', ()=>{ magAShown = magAChk.checked; renderBase(); });
+      magBChk.addEventListener('change', ()=>{ magBShown = magBChk.checked; renderBase(); });
+
+      // render base
+      function renderBase(){ clear(); const t = computeTransform(); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvasWidth,canvasHeight); ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1; for (let i = -t.perSide; i <= t.perSide; i++){ const x = t.cx + i * t.tickStep * t.scale; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvasHeight); ctx.stroke(); } for (let j = -t.perSide; j <= t.perSide; j++){ const y = t.cy - j * t.tickStep * t.scale; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvasWidth,y); ctx.stroke(); } drawAxes(t); drawStaticElements(t); }
+
+      // draw static immediate
+      function drawStatic(){ renderBase(); }
+
+      // per-vector draw
+      drawA.addEventListener('click', async ()=>{ vectorAComplete = false; magAShown = false; magAChk.checked = false; const x = Number(x1Input.value), y = Number(y1Input.value); await animateVector(x,y,{ color:A_COLOR, xCompFlag: axComp.checked, yCompFlag: ayComp.checked, label:'A' }); renderBase(); });
+      drawB.addEventListener('click', async ()=>{ vectorBComplete = false; magBShown = false; magBChk.checked = false; const x = Number(x2Input.value), y = Number(y2Input.value); await animateVector(x,y,{ color:B_COLOR, xCompFlag: bxComp.checked, yCompFlag: byComp.checked, label:'B' }); renderBase(); });
+
+      // reset
+      resetBtn.addEventListener('click', ()=>{ x1Input.value=''; y1Input.value=''; x2Input.value=''; y2Input.value=''; axComp.checked=false; ayComp.checked=false; bxComp.checked=false; byComp.checked=false; magAChk.checked=false; magBChk.checked=false; vectorAComplete=false; vectorBComplete=false; magAShown=false; magBShown=false; clear(); renderBase(); });
+
+      // when user changes coords, clear previously drawn vector for that point
+      [x1Input,y1Input].forEach(el=> el.addEventListener('input', ()=>{ vectorAComplete = false; magAShown = false; magAChk.checked = false; renderBase(); }));
+      [x2Input,y2Input].forEach(el=> el.addEventListener('input', ()=>{ vectorBComplete = false; magBShown = false; magBChk.checked = false; renderBase(); }));
+      [axComp,ayComp,bxComp,byComp].forEach(el=> el.addEventListener('change', ()=>{ renderBase(); }));
+
+      // resize handling
+      let resizeTimeout = null; function resizeAndRender(){ updateCanvasSize(); if (resizeTimeout) clearTimeout(resizeTimeout); resizeTimeout = setTimeout(()=>{ renderBase(); resizeTimeout = null; }, 60); }
       window.addEventListener('resize', resizeAndRender); window.addEventListener('orientationchange', resizeAndRender);
 
-      // initial
-      drawStatic();
+      // initial draw
+      renderBase();
+
     })();
   </script>
 </body>
